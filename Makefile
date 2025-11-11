@@ -1,83 +1,120 @@
-.PHONY: help install install-dev uninstall clean build test lint format type-check pre-commit docs
+.PHONY: help setup-venv venv install install-dev uninstall clean build test lint format type-check pre-commit docs shell check check-api-key test-api example-query version info build-clean
+
+# Virtual environment configuration
+VENV := perplxenv
+PYTHON := $(VENV)/bin/python
+PIP := $(VENV)/bin/pip
+
+# Create virtual environment if it doesn't exist
+$(VENV):
+	@echo "Creating virtual environment: $(VENV)"
+	python3 -m venv $(VENV)
+	@echo "✓ Virtual environment created"
+	@echo ""
+	@echo "Activate it with: source $(VENV)/bin/activate"
+
+# Alias for venv
+venv: $(VENV)
+
+# Setup venv and install dev dependencies
+setup-venv: $(VENV) install-dev
+	@echo ""
+	@echo "✓ Virtual environment setup complete!"
+	@echo ""
+	@echo "To activate the virtual environment, run:"
+	@echo "  source $(VENV)/bin/activate"
+	@echo ""
+	@echo "To deactivate, run:"
+	@echo "  deactivate"
 
 # Default target
 help:
 	@echo "Perplexity AI Toolkit - Development Commands"
 	@echo "============================================"
 	@echo ""
+	@echo "Virtual Environment:"
+	@echo "  make venv              Create virtual environment ($(VENV))"
+	@echo "  make setup-venv        Create venv and install dev dependencies (recommended)"
+	@echo ""
 	@echo "Setup & Installation:"
-	@echo "  make install          Install package in production mode"
-	@echo "  make install-dev      Install package in development mode with all extras"
-	@echo "  make uninstall        Uninstall the package"
+	@echo "  make install           Install package in production mode"
+	@echo "  make install-dev       Install package in development mode with all extras"
+	@echo "  make uninstall         Uninstall the package"
 	@echo ""
 	@echo "Code Quality:"
-	@echo "  make lint             Run flake8 linter"
-	@echo "  make format           Format code with black and isort"
-	@echo "  make type-check       Run mypy type checker"
-	@echo "  make pre-commit       Run all pre-commit checks (lint, format, type-check)"
+	@echo "  make lint              Run flake8 linter"
+	@echo "  make format            Format code with black and isort"
+	@echo "  make type-check        Run mypy type checker"
+	@echo "  make pre-commit        Run all pre-commit checks (lint, format, type-check)"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test             Run pytest tests"
-	@echo "  make test-cov         Run tests with coverage report"
+	@echo "  make test              Run pytest tests"
+	@echo "  make test-cov          Run tests with coverage report"
 	@echo ""
 	@echo "Building & Distribution:"
-	@echo "  make build            Build source and wheel distributions"
-	@echo "  make build-clean      Remove all build artifacts"
-	@echo "  make clean            Clean all generated files (build, tests, cache)"
+	@echo "  make build             Build source and wheel distributions"
+	@echo "  make build-clean       Remove all build artifacts"
+	@echo "  make clean             Clean all generated files (build, tests, cache)"
 	@echo ""
 	@echo "Documentation:"
-	@echo "  make docs             Generate documentation"
+	@echo "  make docs              Generate documentation"
 	@echo ""
 	@echo "Development:"
-	@echo "  make shell            Start Python interactive shell"
-	@echo "  make check            Run all checks (lint, type-check, test)"
+	@echo "  make shell             Start Python interactive shell"
+	@echo "  make check             Run all checks (lint, type-check, test)"
 	@echo ""
 
 # Installation targets
-install:
-	pip install .
+install: $(VENV)
+	@echo "Installing package..."
+	$(PIP) install .
+	@echo "✓ Installation complete"
 
-install-dev:
-	pip install -e ".[dev,pdf,image]"
+install-dev: $(VENV)
+	@echo "Installing development dependencies..."
+	$(PIP) install -e ".[dev,pdf,image]"
+	@echo "✓ Development environment setup complete"
 
-uninstall:
-	pip uninstall -y perplexity-toolkit
+uninstall: $(VENV)
+	@echo "Uninstalling package..."
+	$(PIP) uninstall -y perplexity-toolkit || true
+	@echo "✓ Uninstallation complete"
 
 # Code quality targets
-lint:
+lint: $(VENV)
 	@echo "Running flake8..."
-	flake8 perplx.py tangle/ examples/ --count --select=E9,F63,F7,F82 --show-source --statistics
+	$(PYTHON) -m flake8 perplx.py tangle/ examples/ --count --select=E9,F63,F7,F82 --show-source --statistics
 	@echo "✓ Linting complete"
 
-format:
+format: $(VENV)
 	@echo "Running black..."
-	black perplx.py tangle/ examples/
+	$(PYTHON) -m black perplx.py tangle/ examples/
 	@echo "Running isort..."
-	isort perplx.py tangle/ examples/
+	$(PYTHON) -m isort perplx.py tangle/ examples/
 	@echo "✓ Code formatting complete"
 
-type-check:
+type-check: $(VENV)
 	@echo "Running mypy..."
-	mypy perplx.py tangle/ examples/ --ignore-missing-imports --check-untyped-defs || true
+	$(PYTHON) -m mypy perplx.py tangle/ examples/ --ignore-missing-imports --check-untyped-defs || true
 	@echo "✓ Type checking complete"
 
 pre-commit: format lint type-check
 	@echo "✓ All pre-commit checks passed"
 
 # Testing targets
-test:
+test: $(VENV)
 	@echo "Running pytest..."
-	pytest -v --tb=short || true
+	$(PYTHON) -m pytest -v --tb=short || true
 
-test-cov:
+test-cov: $(VENV)
 	@echo "Running pytest with coverage..."
-	pytest --cov=. --cov-report=html --cov-report=term-missing || true
+	$(PYTHON) -m pytest --cov=. --cov-report=html --cov-report=term-missing || true
 	@echo "Coverage report generated in htmlcov/index.html"
 
 # Build targets
-build:
+build: $(VENV)
 	@echo "Building distributions..."
-	python -m build
+	$(PYTHON) -m build
 	@echo "✓ Build complete"
 
 build-clean:
@@ -97,17 +134,22 @@ clean: build-clean
 	rm -rf htmlcov/
 	@echo "✓ All caches cleaned"
 
+clean-venv:
+	@echo "Removing virtual environment: $(VENV)"
+	rm -rf $(VENV)
+	@echo "✓ Virtual environment removed"
+
 # Documentation targets
-docs:
+docs: $(VENV)
 	@echo "Generating documentation..."
 	@echo "Note: Ensure you have sphinx installed (pip install sphinx)"
 	@echo "Documentation generation would go here"
 	@echo "✓ Documentation would be generated in docs/"
 
 # Development targets
-shell:
+shell: $(VENV)
 	@echo "Starting Python interactive shell..."
-	python -c "import sys; sys.path.insert(0, '.'); import perplx; from tangle.text.text_client import PerplexityTextClient; print('Available: PerplexityTextClient, ModelConfig'); import code; code.interact(local=locals())"
+	$(PYTHON) -c "import sys; sys.path.insert(0, '.'); import perplx; from tangle.text.text_client import PerplexityTextClient; print('Available: PerplexityTextClient, ModelConfig'); import code; code.interact(local=locals())"
 
 check: lint type-check test
 	@echo "✓ All checks passed!"
@@ -122,18 +164,18 @@ check-api-key:
 	fi
 
 # Run a simple test query (requires API key)
-test-api: check-api-key
-	@python -c "from tangle.text.text_client import PerplexityTextClient; client = PerplexityTextClient(); print('Testing API...'); response = client.query('What is 2+2?'); print('✓ API test successful'); print('Response:', response[:100] + '...' if len(response) > 100 else response)"
+test-api: $(VENV) check-api-key
+	@$(PYTHON) -c "from tangle.text.text_client import PerplexityTextClient; client = PerplexityTextClient(); print('Testing API...'); response = client.query('What is 2+2?'); print('✓ API test successful'); print('Response:', response[:100] + '...' if len(response) > 100 else response)"
 
 # Quick start examples
-example-query:
+example-query: $(VENV)
 	@echo "Running simple query example..."
-	@python examples/city_info.py
+	@$(PYTHON) examples/city_info.py
 
 # Version information
-version:
+version: $(VENV)
 	@echo "Perplexity AI Toolkit"
-	@python -c "import setup; print('Version: 0.1.0')" 2>/dev/null || echo "Version: 0.1.0"
+	@$(PYTHON) -c "import setup; print('Version: 0.1.0')" 2>/dev/null || echo "Version: 0.1.0"
 
 # Info targets
 info:
@@ -150,9 +192,14 @@ info:
 	@echo "  tangle/image/          - Image processing"
 	@echo "  examples/              - Example utilities and usage"
 	@echo ""
+	@echo "Virtual Environment:"
+	@echo "  Location: $(VENV)"
+	@echo "  Activate: source $(VENV)/bin/activate"
+	@echo "  Deactivate: deactivate"
+	@echo ""
 	@echo "Quick Links:"
 	@echo "  make help              - Show this help message"
-	@echo "  make install-dev       - Setup development environment"
+	@echo "  make setup-venv        - Setup development environment (recommended)"
 	@echo "  make check             - Run all code checks"
 	@echo "  make test              - Run unit tests"
 	@echo "  make clean             - Clean generated files"
