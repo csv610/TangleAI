@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 from perplexity import Perplexity
 from typing import Dict, Any, List, Optional
-from config import ModelConfig, ModelInput
+from config import ModelConfig, ModelInput, SearchFilter
 from image_utils import ImageUtils
 
 
@@ -82,13 +82,14 @@ class PerplexityClient:
         messages.append({"role": "user", "content": user_content})
         return messages
 
-    def _build_api_params(self, model_input: ModelInput, config: ModelConfig) -> Dict[str, Any]:
+    def _build_api_params(self, model_input: ModelInput, config: ModelConfig, search_filter: Optional[SearchFilter] = None) -> Dict[str, Any]:
         """
         Build API parameters from ModelInput and ModelConfig.
 
         Args:
             model_input: ModelInput dataclass with user prompt and input options
             config: ModelConfig dataclass with model parameters and hyperparameters
+            search_filter: Optional SearchFilter for high-level search result filtering
 
         Returns:
             Dictionary of API parameters ready for the Perplexity API
@@ -126,6 +127,11 @@ class PerplexityClient:
         if config.disable_search:
             api_params["search_mode"] = "local" if config.disable_search else "web"
 
+        # Add high-level search filters if provided
+        if search_filter:
+            search_filter_params = search_filter.to_model_config()
+            api_params.update(search_filter_params)
+
         # Add structured output if response_model is provided
         if model_input.response_model is not None:
             api_params["response_format"] = {
@@ -137,7 +143,7 @@ class PerplexityClient:
 
         return api_params
 
-    def generate_content(self, model_input: ModelInput, config: Optional[ModelConfig] = None) -> Dict[str, Any]:
+    def generate_content(self, model_input: ModelInput, config: Optional[ModelConfig] = None, search_filter: Optional[SearchFilter] = None) -> Dict[str, Any]:
         """
         Generate content using the Perplexity API.
 
@@ -145,15 +151,24 @@ class PerplexityClient:
             model_input: ModelInput dataclass with user prompt and input options
             config: Optional ModelConfig dataclass with model parameters and hyperparameters.
                    If not provided, uses sensible defaults.
+            search_filter: Optional SearchFilter for high-level search result filtering.
+                          Provides an easy way to filter domains, dates, and recency.
 
         Returns:
             Complete API response object
+
+        Example:
+            >>> filter = SearchFilter(
+            ...     allowed_domains=["nasa.gov", "wikipedia.org"],
+            ...     recency="week"
+            ... )
+            >>> response = client.generate_content(model_input, search_filter=filter)
         """
         # Use provided config, fall back to constructor config, or create default one
         if config is None:
             config = self.config or ModelConfig()
 
-        api_params = self._build_api_params(model_input, config)
+        api_params = self._build_api_params(model_input, config, search_filter)
         response = self.client.chat.completions.create(**api_params)
 
         return response
