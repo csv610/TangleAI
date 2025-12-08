@@ -1,27 +1,29 @@
 # Perplexity AI Python Toolkit
 
-A comprehensive Python client and toolkit for the Perplexity AI API. Provides easy access to multiple AI capabilities including simple queries, step-by-step reasoning, deep research, interactive chat, and specialized processing for text, PDFs, and images.
+A comprehensive Python client and toolkit for the Perplexity AI API. Provides easy access to querying, reasoning, research, and specialized AI applications with support for text, PDFs, and images.
 
 ## Features
 
-### Core Capabilities
-- **Simple Queries** - Ask questions and get instant responses
-- **Step-by-Step Reasoning** - Get detailed logical analysis with multiple reasoning effort levels
-- **Deep Research** - Comprehensive research with sources and citations at various depth levels
-- **Interactive Chat** - Multi-turn conversations with history management
-- **Advanced Search** - Powerful search with 30+ configurable parameters, domain filtering, and geographic targeting
+### Core Client (`PerplexityClient`)
+- **Flexible Configuration** - `ModelConfig` with 13+ parameters for fine-grained control
+- **Search Filtering** - High-level `SearchFilter` abstraction for domain and date filtering
+- **Structured Output** - Pydantic-based response models with JSON schema validation
+- **Multi-modal Input** - Support for text, images, and PDF documents
+- **Parameter Control** - Temperature, penalties, reasoning effort, language preference, and more
 
-### Specialized Processing
-- **PDF Processing** - Extract chapters, learn from books, analyze academic papers
-- **Image Processing** - Process and analyze images
-- **Medicine Lookup** - Comprehensive medicine and drug information from multiple APIs (OpenFDA, RxNav, PubChem, DrugBank)
-- **Domain Discovery** - Intelligently identify authoritative domains for any topic
+### Specialized Applications
+- **Disease QA** - Medical question answering with structured disease information
+- **Research Finder** - Discovers authoritative sources and performs in-depth research
+- **Daily Knowledge Bot** - Aggregates and summarizes daily knowledge on topics
+- **Fact Checker** - Validates claims with structured output verification
+- **Paper Review** - Analyzes academic papers with detailed summaries
+- **Medicine Lookup** - Comprehensive medicine and drug information
 
 ### Developer-Friendly
-- **Configuration Management** - Robust `ModelConfig` with validation and factory methods
-- **CLI Tools** - Command-line interfaces for all major features
-- **Utility Libraries** - Pydantic helpers, prompt generation, formatting utilities
-- **Error Handling** - Automatic retry logic with exponential backoff
+- **Comprehensive Tests** - 94+ parameter-focused unit tests
+- **Type-Safe Configuration** - Dataclass-based configs with validation
+- **CLI Support** - Command-line interface for the main client
+- **Error Handling** - Proper exception handling and validation
 
 ## Installation
 
@@ -56,164 +58,159 @@ source ~/.bashrc
 
 ## Quick Start
 
-### Using the Python API
+### Basic Usage
 
 ```python
-from tangle.text.text_client import PerplexityTextClient, ReasoningEffort, ResearchDepth
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelConfig, ModelInput
 
 # Initialize client
-client = PerplexityTextClient()
+client = PerplexityClient()
 
 # Simple query
-response = client.query("What is quantum computing?")
-print(response)
+model_input = ModelInput(user_prompt="What is quantum computing?")
+response = client.generate_content(model_input)
+print(response.choices[0].message.content)
 
-# Step-by-step reasoning
-response = client.reason(
-    "Why is the sky blue?",
-    effort=ReasoningEffort.HIGH,
-    step_by_step=True
-)
-print(response)
-
-# Deep research
-response = client.research(
-    "Latest breakthroughs in AI",
-    depth=ResearchDepth.COMPREHENSIVE
-)
-print(response)
-
-# Interactive chat
-messages = []
-response = client.chat("Hello, how can you help?", messages)
-print(response)
-```
-
-### Using Configuration
-
-```python
-from perplx import ModelConfig
-
-# Create a configuration for reasoning
+# Query with custom configuration
 config = ModelConfig(
-    model="sonar-reasoning-pro",
-    temperature=0.3,
-    max_tokens=2000,
-    reasoning_effort="high"
+    model="sonar-pro",
+    temperature=0.7,
+    max_tokens=2048
 )
+response = client.generate_content(model_input, config)
+print(response.choices[0].message.content)
 
-# Create a configuration for research
-research_config = ModelConfig.create_research_config(depth="comprehensive")
-
-# Or use factory method for reasoning
-reasoning_config = ModelConfig.create_reasoning_config(effort="high")
+# Query with system prompt
+model_input = ModelInput(
+    user_prompt="Explain quantum entanglement",
+    system_prompt="You are a physics expert. Explain concepts clearly."
+)
+response = client.generate_content(model_input, config)
+print(response.choices[0].message.content)
 ```
 
-### Advanced Search
+### Using Search Filters
 
 ```python
-from tangle.text.perplx_search import PerplexitySearchClient, Config
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelConfig, ModelInput, SearchFilter
 
-# Create a search configuration
-config = Config(
-    max_results=10,
-    search_mode="web",
-    temperature=0.2
-).set_domain_filter_by_query("quantum computing", count=10)
+client = PerplexityClient()
 
-# Initialize client
-client = PerplexitySearchClient(config)
+# Filter search results by domain and recency
+search_filter = SearchFilter(
+    allowed_domains=["arxiv.org", "scholar.google.com"],
+    recency="month"
+)
 
-# Perform search
-results = client.search("latest quantum computing developments")
+model_input = ModelInput(user_prompt="Recent breakthroughs in machine learning")
+config = ModelConfig(return_related_questions=True)
 
-# Batch search
-queries = [
-    "quantum computing applications",
-    "quantum error correction",
-    "quantum algorithms"
-]
-results = client.batch_search(queries)
-client.save_results_json(results, "results.json")
+response = client.generate_content(model_input, config, search_filter)
+print(response.choices[0].message.content)
+```
+
+### Structured Output
+
+```python
+from pydantic import BaseModel
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelInput
+
+class ResearchResult(BaseModel):
+    topic: str
+    summary: str
+    key_findings: list[str]
+    sources: list[str]
+
+client = PerplexityClient()
+
+model_input = ModelInput(
+    user_prompt="Research recent AI breakthroughs",
+    response_model=ResearchResult
+)
+
+response = client.generate_content(model_input)
+result = ResearchResult.model_validate_json(response.choices[0].message.content)
+print(result)
 ```
 
 ### CLI Tools
 
-Each major feature has a command-line interface:
-
 ```bash
-# Simple queries
-python tangle/text/perplx_query.py -q "What is machine learning?"
-
-# Reasoning
-python tangle/text/perplx_reasoning.py -q "Explain quantum entanglement"
-
-# Research
-python tangle/text/perplx_research.py -q "Recent AI breakthroughs"
-
-# Interactive chat
-python tangle/text/perplx_chat.py
-
-# Batch processing
-python tangle/text/perplx_query.py -f questions.txt -o answers.txt
+# Query the Perplexity API with custom configuration
+python tangle/perplx_client.py -q "What is quantum computing?" \
+  -s "You are a physics expert" \
+  -m sonar-pro \
+  -t 0.7 \
+  --max-tokens 2048
 ```
 
 ## Configuration Options
 
-### ModelConfig Parameters
+### ModelConfig Parameters (13 parameters)
 
 ```python
-ModelConfig(
-    # Core parameters
-    model="sonar-pro",              # Model to use
-    temperature=0.7,                # Response randomness (0.0-1.0)
-    max_tokens=2000,                # Maximum response length
-    system_prompt="...",            # System instructions
+config = ModelConfig(
+    # Model selection
+    model="sonar",                  # Model name (sonar, sonar-pro)
 
-    # Reasoning parameters
-    reasoning_effort="medium",      # low | medium | high
-    use_step_by_step=True,          # Enable step-by-step reasoning
+    # Core sampling parameters
+    temperature=0.7,                # Randomness (0.0-2.0), default 0.7
+    top_p=0.9,                      # Nucleus sampling (0.0-1.0), default 0.9
+    max_tokens=1024,                # Max response length, default 1024
 
-    # Research parameters
-    research_depth="standard",      # brief | standard | comprehensive
+    # Streaming
+    stream=False,                   # Stream responses, default False
 
-    # Conversation parameters
-    conversation_history=[...]      # Previous messages
+    # Search behavior
+    search_mode="web",              # web | local, default web
+    disable_search=False,           # Disable web search, default False
+    language_preference="en",       # Language code (en, es, fr, etc)
+
+    # Advanced reasoning
+    reasoning_effort="medium",      # low | medium | high, default medium
+
+    # Response options
+    return_images=False,            # Include images in results
+    return_related_questions=False, # Include related questions
+
+    # Sampling penalties
+    top_k=0,                        # Top-k sampling (0 disabled)
+    presence_penalty=0.0,           # Penalize token repetition
+    frequency_penalty=0.0           # Penalize frequent tokens
 )
 ```
 
-### Search Config Parameters
-
-The `Config` class in `perplx_search.py` provides 30+ parameters organized by category:
+### SearchFilter Parameters
 
 ```python
-Config(
-    # Search Results (2 params)
-    max_results=10,
-    search_domain_filter=["nature.com"],
+filter = SearchFilter(
+    # Domain filtering (choose one)
+    allowed_domains=["nasa.gov", "arxiv.org"],  # Whitelist domains
+    blocked_domains=["reddit.com"],              # Blacklist domains
 
-    # Geographic & Language (6 params)
-    iso_country_code="US",
-    language_preference="en",
-    user_location_latitude=None,
-    user_location_longitude=None,
-    user_location_region=None,
-    user_location_city=None,
+    # Date filtering (choose one approach)
+    recency="month",                # day | week | month | year
+    # OR
+    published_after="3/1/2025",    # Publication date range
+    published_before="12/31/2025",
+    # OR
+    updated_after="3/1/2025",      # Last update date range
+    updated_before="12/31/2025"
+)
+```
 
-    # Date Filtering (5 params)
-    search_recency_filter="month",  # day | week | month | year
-    search_after_date="01/01/2024",
-    search_before_date="12/31/2024",
-    last_updated_after=None,
-    last_updated_before=None,
+### ModelInput Parameters
 
-    # LLM Control (7 params)
-    temperature=0.2,
-    max_tokens=None,
-    top_p=0.9,
-    presence_penalty=0.0,
-    frequency_penalty=0.0,
-    # ... and more
+```python
+input_data = ModelInput(
+    user_prompt="Your question here",       # Required (unless image/PDF provided)
+    system_prompt="Role instructions",      # Optional system prompt
+    image_path="/path/to/image.png",        # Optional image file
+    pdf_path="/path/to/document.pdf",       # Optional PDF file
+    response_model=PydanticModel            # Optional structured output schema
 )
 ```
 
@@ -224,170 +221,216 @@ Perplexity/
 ├── README.md                       # This file
 ├── setup.py                        # Package configuration
 ├── Makefile                        # Development tasks
-├── perplx.py                       # Core ModelConfig class
-├── examples/                       # Example utilities
-│   ├── pydantic_utils.py
-│   ├── simple_prompt_gen.py
-│   ├── markdown_model_doc.py
-│   ├── city_info.py
-│   └── test_*.py
-└── tangle/                         # Main modules
-    ├── text/                       # Text processing
-    │   ├── text_client.py          # Main client
-    │   ├── perplx_search.py        # Advanced search
-    │   ├── domain_search.py        # Domain discovery
-    │   ├── perplx_query.py         # Query CLI
-    │   ├── perplx_reasoning.py     # Reasoning CLI
-    │   ├── perplx_research.py      # Research CLI
-    │   ├── perplx_chat.py          # Chat CLI
-    │   ├── shared_utils.py         # Utilities
-    │   └── cli_base.py             # Base CLI class
-    ├── pdf/                        # PDF processing
-    │   ├── pdf_client.py
-    │   ├── extract_book_chapter.py
-    │   ├── learn_book.py
-    │   ├── paper_review.py
-    │   └── base classes
-    ├── image/                      # Image processing
-    │   └── image_client.py
-    ├── medicine_lookup.py          # Medicine information
-    └── drugbank_medicine.py        # DrugBank integration
+├── tangle/                         # Core modules
+│   ├── perplx_client.py           # Main Perplexity client
+│   ├── config.py                  # ModelConfig, ModelInput, SearchFilter
+│   ├── image_utils.py             # Image encoding utilities
+│   ├── domain_search.py           # Domain discovery
+│   ├── country_code.py            # Country code utilities
+│   ├── test_perplx_client.py      # 94+ comprehensive tests
+│   └── text/                       # Text processing modules (legacy)
+└── apps/                           # Specialized applications
+    ├── disease_qa.py              # Medical Q&A system
+    ├── research_finder.py         # Research discovery
+    ├── daily_knowledge_bot.py     # Daily knowledge aggregation
+    ├── facts_checker.py           # Fact verification
+    ├── paper_review.py            # Academic paper analysis
+    ├── medicine_lookup.py         # Medicine information lookup
+    ├── drugbank_medicine.py       # DrugBank API integration
+    ├── perplx_client_cli.py       # CLI interface
+    ├── medhelp.py                 # Medical help application
+    └── test_disease_qa.py         # Disease QA tests
 ```
 
 ## Models Supported
 
 - **sonar** - Fast, compact model for quick queries
-- **sonar-pro** - Balanced model with better reasoning
-- **sonar-reasoning** - Enhanced reasoning for complex analysis
-- **sonar-reasoning-pro** - Professional-grade reasoning
-- **sonar-deep-research** - Comprehensive research with sources
+- **sonar-pro** - Balanced model with better reasoning and capabilities
 
 ## API Reference
 
-### PerplexityTextClient
+### PerplexityClient
 
 ```python
-client.query(prompt: str) -> str
-    """Execute a simple query."""
+client = PerplexityClient(config: Optional[ModelConfig] = None)
+    """Initialize the Perplexity client with optional default config."""
 
-client.reason(
-    prompt: str,
-    effort: Optional[ReasoningEffort] = None,
-    use_pro: bool = True,
-    step_by_step: bool = True
-) -> str
-    """Get step-by-step reasoning."""
+client.generate_content(
+    model_input: ModelInput,
+    config: Optional[ModelConfig] = None,
+    search_filter: Optional[SearchFilter] = None
+) -> ChatCompletion
+    """Generate content based on input and configuration.
 
-client.research(
-    prompt: str,
-    depth: Optional[ResearchDepth] = None,
-    use_pro: bool = True
-) -> str
-    """Get deep research with sources."""
-
-client.chat(
-    prompt: str,
-    messages: List[Dict[str, str]],
-    model: Optional[str] = None
-) -> str
-    """Interactive chat with history."""
+    Returns a ChatCompletion response with choices[0].message.content
+    containing the assistant's response.
+    """
 ```
 
-### PerplexitySearchClient
+### Specialized Applications
 
+#### Disease QA
 ```python
-client.search(query: str)
-    """Perform a single search."""
+from apps.disease_qa import DiseaseQA
 
-client.batch_search(queries: List[str])
-    """Run multiple queries with delays."""
+qa = DiseaseQA()
+result = qa.answer_disease_question("What are symptoms of diabetes?")
+print(result.symptoms, result.treatment_options)
+```
 
-client.discover_domains(
-    query: str,
-    count: int = 10
-) -> DomainResult
-    """Discover authoritative domains."""
+#### Research Finder
+```python
+from apps.research_finder import ResearchFinder
 
-client.save_results_json(responses, output_path: str)
-    """Save results to JSON file."""
+finder = ResearchFinder()
+results = finder.find_research("machine learning in healthcare")
+```
+
+#### Daily Knowledge Bot
+```python
+from apps.daily_knowledge_bot import DailyKnowledgeBot
+
+bot = DailyKnowledgeBot()
+summary = bot.get_daily_summary("AI breakthroughs")
+```
+
+#### Fact Checker
+```python
+from apps.facts_checker import FactChecker
+
+checker = FactChecker()
+result = checker.verify_claim("Machine learning is a subset of AI")
+print(result.is_verified, result.confidence)
 ```
 
 ## Examples
 
-### Example 1: Research a Topic
+### Example 1: Structured Medical Query
 
 ```python
-from tangle.text.text_client import PerplexityTextClient, ResearchDepth
+from pydantic import BaseModel
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelInput
 
-client = PerplexityTextClient()
-result = client.research(
-    "How do transformers work in machine learning?",
-    depth=ResearchDepth.COMPREHENSIVE
-)
-print(result)
-```
+class DiseaseInfo(BaseModel):
+    name: str
+    symptoms: list[str]
+    treatment_options: list[str]
+    severity: str
 
-### Example 2: Batch Queries
+client = PerplexityClient()
 
-```python
-from tangle.text.perplx_search import PerplexitySearchClient, Config
-
-config = Config(max_results=5)
-client = PerplexitySearchClient(config)
-
-questions = [
-    "What is quantum computing?",
-    "How do quantum computers differ from classical computers?",
-    "What are quantum algorithms?"
-]
-
-results = client.batch_search(questions)
-client.save_results_json(results, "quantum_research.json")
-```
-
-### Example 3: Domain-Specific Search
-
-```python
-from tangle.text.perplx_search import PerplexitySearchClient, Config
-
-# Automatically discover authoritative domains for the topic
-config = Config(max_results=10).set_domain_filter_by_query(
-    "machine learning in healthcare",
-    count=8
+model_input = ModelInput(
+    user_prompt="What is type 2 diabetes? Include symptoms and treatments.",
+    response_model=DiseaseInfo
 )
 
-client = PerplexitySearchClient(config)
-results = client.search("latest machine learning applications in healthcare")
+response = client.generate_content(model_input)
+disease_data = DiseaseInfo.model_validate_json(response.choices[0].message.content)
+print(f"Disease: {disease_data.name}")
+print(f"Symptoms: {disease_data.symptoms}")
+print(f"Treatments: {disease_data.treatment_options}")
 ```
 
-### Example 4: Interactive Chat
+### Example 2: Filtered Research Query
 
 ```python
-from tangle.text.text_client import PerplexityTextClient
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelConfig, ModelInput, SearchFilter
 
-client = PerplexityTextClient()
+client = PerplexityClient()
 
-# Start a conversation
-messages = []
-while True:
-    user_input = input("You: ")
-    if user_input.lower() in ['exit', 'quit']:
-        break
+# Research only from academic sources published in the last month
+search_filter = SearchFilter(
+    allowed_domains=["arxiv.org", "scholar.google.com", "pubmed.gov"],
+    recency="month"
+)
 
-    response = client.chat(user_input, messages)
-    print(f"AI: {response}")
+model_input = ModelInput(
+    user_prompt="What are the latest breakthroughs in CRISPR gene therapy?"
+)
 
-    # Update message history
-    messages.append({"role": "user", "content": user_input})
-    messages.append({"role": "assistant", "content": response})
+config = ModelConfig(
+    model="sonar-pro",
+    temperature=0.5,
+    return_related_questions=True
+)
+
+response = client.generate_content(model_input, config, search_filter)
+print(response.choices[0].message.content)
 ```
+
+### Example 3: Multi-Modal Query with PDF
+
+```python
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelInput
+
+client = PerplexityClient()
+
+model_input = ModelInput(
+    user_prompt="Summarize this research paper and extract the key findings.",
+    pdf_path="/path/to/research_paper.pdf",
+    system_prompt="You are an expert research analyst. Be concise and precise."
+)
+
+response = client.generate_content(model_input)
+print(response.choices[0].message.content)
+```
+
+### Example 4: Temperature Control for Creativity
+
+```python
+from tangle.perplx_client import PerplexityClient
+from tangle.config import ModelConfig, ModelInput
+
+client = PerplexityClient()
+
+# Low temperature for factual, deterministic responses
+factual_config = ModelConfig(temperature=0.1)
+model_input = ModelInput(user_prompt="What is the capital of France?")
+response = client.generate_content(model_input, factual_config)
+
+# High temperature for creative responses
+creative_config = ModelConfig(temperature=1.5)
+model_input = ModelInput(user_prompt="Generate a creative story about AI")
+response = client.generate_content(model_input, creative_config)
+```
+
+## Testing
+
+The project includes comprehensive tests with 94+ test cases covering all parameters:
+
+```bash
+# Run all tests
+pytest tangle/test_perplx_client.py -v
+
+# Run specific test class
+pytest tangle/test_perplx_client.py::TestModelConfigParameters -v
+
+# Run with coverage
+pytest tangle/test_perplx_client.py --cov=tangle
+```
+
+### Test Coverage
+
+- **ModelConfig Parameters** (28 tests) - All 13 parameters tested individually and in combinations
+- **SearchFilter Parameters** (26 tests) - Domain filtering, date filtering, validation
+- **ModelInput Parameters** (16 tests) - Input validation, prompt handling, attachments
+- **Parameter Combinations** (7 tests) - How parameters interact with each other
+- **Integration Tests** (17 tests) - Full workflow tests
 
 ## Development
 
-### Run Tests
+### Setup Development Environment
 
 ```bash
-make test
+# Create virtual environment
+python3 -m venv perplxenv
+source perplxenv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
 ### Code Quality
@@ -399,21 +442,8 @@ make format
 # Lint code
 make lint
 
-# Type check
+# Run type checks
 make type-check
-```
-
-### Build and Install
-
-```bash
-# Build the package
-make build
-
-# Install in development mode
-make install
-
-# Clean build artifacts
-make clean
 ```
 
 ## Common Issues
@@ -461,6 +491,17 @@ For issues, questions, or suggestions:
 
 ## Changelog
 
+### Version 0.2.0 (Current)
+- Core `PerplexityClient` with flexible configuration
+- `ModelConfig` with 13 parameters for fine-grained control
+- `SearchFilter` high-level abstraction for domain and date filtering
+- `ModelInput` for multi-modal inputs (text, images, PDFs)
+- Pydantic-based structured output with JSON schema validation
+- Comprehensive test suite with 94+ parameter tests
+- Specialized applications: Disease QA, Research Finder, Daily Knowledge Bot, Fact Checker
+- Medicine lookup and DrugBank integration
+- Image and PDF processing utilities
+
 ### Version 0.1.0 (Initial Release)
 - Core text client with query, reasoning, research, and chat
 - Advanced search with 30+ configuration parameters
@@ -469,4 +510,3 @@ For issues, questions, or suggestions:
 - Image processing support
 - Medicine/drug lookup system
 - CLI tools for all major features
-- Comprehensive error handling and retry logic
