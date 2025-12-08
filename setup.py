@@ -41,7 +41,7 @@ setup(
     ],
     python_requires=">=3.7",
     install_requires=[
-        "perplexity-ai>=0.1.0",
+        "perplexityai>=0.22.0",
         "tenacity>=8.0.0",
         "httpx>=0.23.0",
         "pydantic>=1.9.0",
