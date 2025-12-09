@@ -5,7 +5,7 @@ A comprehensive Python client and toolkit for the Perplexity AI API. Provides ea
 ## Features
 
 ### Core Client (`PerplexityClient`)
-- **Flexible Configuration** - `ModelConfig` with 13+ parameters for fine-grained control
+- **Flexible Configuration** - `ModelConfig` with 15 parameters for fine-grained control
 - **Search Filtering** - High-level `SearchFilter` abstraction for domain and date filtering
 - **Structured Output** - Pydantic-based response models with JSON schema validation
 - **Multi-modal Input** - Support for text, images, and PDF documents
@@ -149,7 +149,7 @@ python tangle/perplx_client.py -q "What is quantum computing?" \
 
 ## Configuration Options
 
-### ModelConfig Parameters (13 parameters)
+### ModelConfig Parameters (15 parameters)
 
 ```python
 config = ModelConfig(
@@ -157,9 +157,9 @@ config = ModelConfig(
     model="sonar",                  # Model name (sonar, sonar-pro)
 
     # Core sampling parameters
-    temperature=0.7,                # Randomness (0.0-2.0), default 0.7
+    temperature=0.2,                # Randomness (0.0-2.0), default 0.2
     top_p=0.9,                      # Nucleus sampling (0.0-1.0), default 0.9
-    max_tokens=1024,                # Max response length, default 1024
+    max_tokens=8000,                # Max response length, default 8000
 
     # Streaming
     stream=False,                   # Stream responses, default False
@@ -175,6 +175,7 @@ config = ModelConfig(
     # Response options
     return_images=False,            # Include images in results
     return_related_questions=False, # Include related questions
+    return_citations=True,          # Include citations in results
 
     # Sampling penalties
     top_k=0,                        # Top-k sampling (0 disabled)
@@ -512,7 +513,7 @@ For issues, questions, or suggestions:
 
 ### Version 0.2.0
 - Core `PerplexityClient` with flexible configuration
-- `ModelConfig` with 13 parameters for fine-grained control
+- `ModelConfig` with 15 parameters for fine-grained control
 - `SearchFilter` high-level abstraction for domain and date filtering
 - `ModelInput` for multi-modal inputs (text, images, PDFs)
 - Pydantic-based structured output with JSON schema validation
