@@ -63,13 +63,16 @@ class PerplexityClient:
         user_content = []
         user_content.append({"type": "text", "text": model_input.user_prompt})
 
-        # Add image if provided
-        if model_input.image_path:
-            image_data_uri = ImageUtils.encode_to_base64(model_input.image_path)
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": image_data_uri}
-            })
+        # Add images if provided
+        if model_input.image_paths:
+            # Automatically resize images to fit within payload limit
+            resized_image_paths = ImageUtils.resize_images_to_fit(model_input.image_paths)
+            for image_path in resized_image_paths:
+                image_data_uri = ImageUtils.encode_to_base64(image_path)
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_data_uri}
+                })
 
         # Add PDF if provided
         if model_input.pdf_path:
@@ -243,9 +246,10 @@ def main():
         help="Optional system prompt to set the assistant's behavior"
     )
     parser.add_argument(
-        "-i", "--image",
+        "-i", "--images",
+        nargs="*",
         default=None,
-        help="Path to an image file to include with the query (PNG, JPEG, GIF, WEBP)"
+        help="Paths to image files to include with the query (PNG, JPEG, GIF, WEBP). Can specify multiple images."
     )
     parser.add_argument(
         "-p", "--pdf",
@@ -293,7 +297,7 @@ def main():
     model_input = ModelInput(
         user_prompt=args.user_prompt,
         system_prompt=args.system_prompt,
-        image_path=args.image,
+        image_paths=args.images,
         pdf_path=args.pdf
     )
 

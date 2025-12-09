@@ -10,6 +10,7 @@ DEFAULT_MAX_TOKENS = 2000
 DEFAULT_PROMPT = "Describe this image in detail"
 
 # Image processing
+# Supported formats: PNG, JPEG, WEBP, GIF (50MB size limit per image)
 SUPPORTED_IMAGE_TYPES = ("jpg", "jpeg", "png", "gif", "webp")
 IMAGE_MIME_TYPE = "image/jpeg"
 
@@ -154,7 +155,7 @@ class ModelInput:
     """Input parameters for model interactions."""
 
     user_prompt: str = ""
-    image_path: Optional[str] = None
+    image_paths: Optional[List[str]] = None
     pdf_path: Optional[str] = None
     system_prompt: Optional[str] = None
     response_model: Optional[Type[BaseModel]] = None
@@ -162,8 +163,8 @@ class ModelInput:
     def __post_init__(self):
         """Validate input after initialization."""
         if not self.user_prompt or not self.user_prompt.strip():
-            if not self.image_path and not self.pdf_path:
-                raise ValueError("user_prompt cannot be empty unless an image_path or pdf_path is provided")
+            if not self.image_paths and not self.pdf_path:
+                raise ValueError("user_prompt cannot be empty unless image_paths or pdf_path is provided")
             self.user_prompt = DEFAULT_PROMPT
 
         # Normalize empty system_prompt to None
