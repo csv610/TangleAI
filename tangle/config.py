@@ -14,6 +14,83 @@ DEFAULT_PROMPT = "Describe this image in detail"
 SUPPORTED_IMAGE_TYPES = ("jpg", "jpeg", "png", "gif", "webp")
 IMAGE_MIME_TYPE = "image/jpeg"
 
+# Common image domain exclusions (denylist)
+EXCLUDE_STOCK_PHOTOS = ["-gettyimages.com", "-shutterstock.com", "-istockphoto.com"]
+"""Stock photo sites with watermarked/licensed content"""
+
+EXCLUDE_SOCIAL_MEDIA = ["-pinterest.com"]
+"""Social media platforms with mixed quality/attribution"""
+
+EXCLUDE_COMMON_WATERMARKED = EXCLUDE_STOCK_PHOTOS + EXCLUDE_SOCIAL_MEDIA
+"""Combined list of common watermarked/low-quality image sources"""
+
+
+@dataclass
+class ImageFilter:
+    """High-level image filtering interface for users.
+
+    Domain filtering supports both broad domains (e.g., "gettyimages.com") and
+    granular URL patterns. Maximum 10 domains per filter.
+    Note: Use allowlist (allowed_image_domains) OR denylist (blacklist_image_domains),
+    not both simultaneously.
+
+    Important:
+    - Maximum of 10 entries in each filter list
+    - Filters only apply when return_images=True is set in ModelConfig
+    - Some domains may not be filterable due to CDN usage
+    - Very restrictive filters may result in no images being returned
+    """
+
+    allowed_image_domains: Optional[list[str]] = None
+    """Whitelist: Only return images from these domains (max 10).
+    Examples: ["unsplash.com", "pexels.com", "pixabay.com"]"""
+
+    blocked_image_domains: Optional[list[str]] = None
+    """Blacklist: Exclude images from these domains (max 10).
+    Examples: ["gettyimages.com", "shutterstock.com", "istockphoto.com", "pinterest.com"]
+    Note: The minus sign (-) prefix is added automatically during conversion."""
+
+    image_formats: Optional[list[str]] = None
+    """Image formats to return. Examples: ["jpg", "png", "webp"]
+    Supported formats: jpg, jpeg, png, gif, webp"""
+
+    def __post_init__(self):
+        """Validate filter configuration."""
+        if self.allowed_image_domains and self.blocked_image_domains:
+            raise ValueError("Cannot use both allowed_image_domains and blocked_image_domains simultaneously. Choose allowlist or denylist mode.")
+
+        if self.allowed_image_domains and len(self.allowed_image_domains) > 10:
+            raise ValueError(f"Maximum 10 domains allowed in allowed_image_domains, got {len(self.allowed_image_domains)}")
+
+        if self.blocked_image_domains and len(self.blocked_image_domains) > 10:
+            raise ValueError(f"Maximum 10 domains allowed in blocked_image_domains, got {len(self.blocked_image_domains)}")
+
+        if self.image_formats:
+            invalid_formats = set(self.image_formats) - set(SUPPORTED_IMAGE_TYPES)
+            if invalid_formats:
+                raise ValueError(f"Invalid image formats: {invalid_formats}. Supported: {SUPPORTED_IMAGE_TYPES}")
+
+    def to_model_config(self) -> dict:
+        """Convert to ModelConfig parameters.
+
+        Automatically handles:
+        - Converting blocked_image_domains to image_domain_filter with minus sign prefix
+        - Keeping allowed_image_domains as-is in image_domain_filter
+        - Converting image_formats to image_format_filter
+        """
+        params = {}
+
+        if self.allowed_image_domains:
+            params["image_domain_filter"] = self.allowed_image_domains
+        elif self.blocked_image_domains:
+            # Add minus prefix for denylist mode
+            params["image_domain_filter"] = [f"-{domain}" for domain in self.blocked_image_domains]
+
+        if self.image_formats:
+            params["image_format_filter"] = self.image_formats
+
+        return params
+
 
 @dataclass
 class SearchFilter:
@@ -119,8 +196,11 @@ class ModelConfig:
         language_preference: Language code (e.g., 'en', 'es', 'fr'), default 'en'
         reasoning_effort: Reasoning level - 'low', 'medium', or 'high', default 'medium'
         return_images: Include images in results, default False
+        return_videos: Include videos in results, default False
         return_related_questions: Include related questions, default False
         return_citations: Include citations in results, default True
+        image_format_filter: Image formats to return - list of formats, default None (all formats)
+        image_domain_filter: Image domain filter - allowlist domains or denylist with "-" prefix (e.g., ["-gettyimages.com", "-shutterstock.com"]), default None
         stream: Stream responses, default False
     """
 
@@ -132,8 +212,11 @@ class ModelConfig:
     presence_penalty: float = 0.0
     reasoning_effort: str = "medium"
     return_images: bool = False
+    return_videos: bool = False
     return_related_questions: bool = False
     return_citations: bool = True
+    image_format_filter: Optional[list[str]] = None
+    image_domain_filter: Optional[list[str]] = None
     search_mode: str = "web"
     stream: bool = False
     temperature: float = 0.2
@@ -218,6 +301,9 @@ class ModelOutput:
 
     images: List[str] = field(default_factory=list)
     """Image URLs returned by the model if return_images was enabled."""
+
+    videos: List[str] = field(default_factory=list)
+    """Video URLs returned by the model if return_videos was enabled."""
 
     search_context_size: Optional[int] = None
     """Size of search context window if available."""
