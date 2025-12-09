@@ -48,7 +48,6 @@ class CityInfo(BaseModel):
 class CityResponse(BaseModel):
     """Structured response for city information."""
     cities: list[CityInfo]
-    citations: list[str] = []
 
 
 class ApiError(Exception):
@@ -56,70 +55,74 @@ class ApiError(Exception):
     pass
 
 
-def correct_city_name(city_name: str, client: PerplexityClient, model: str = "sonar-pro") -> str:
-    """
-    Validate and correct a city name if it's misspelled or incorrect.
+class CityGuide:
+    """A guide for querying and displaying comprehensive city information."""
 
-    Args:
-        city_name: The potentially incorrect city name
-        client: The PerplexityClient instance
-        model: The model to use for the query
+    def __init__(self, model: str = "sonar-pro"):
+        """
+        Initialize the CityGuide with a Perplexity client.
 
-    Returns:
-        The corrected city name
+        Args:
+            model: The model to use for queries (default: sonar-pro)
+        """
+        self.client = PerplexityClient()
+        self.model = model
+        logger.info(f"CityGuide initialized with model: {model}")
 
-    Raises:
-        ApiError: If there's an issue with the API request
-    """
-    correction_prompt = f"""Given the city name: "{city_name}", please verify if this is a correctly spelled, real city name.
+    def correct_name(self, city_name: str) -> str:
+        """
+        Validate and correct a city name if it's misspelled or incorrect.
+
+        Args:
+            city_name: The potentially incorrect city name
+
+        Returns:
+            The corrected city name
+        """
+        correction_prompt = f"""Given the city name: "{city_name}", please verify if this is a correctly spelled, real city name.
 If it is correct, respond with just the city name.
 If it is misspelled or doesn't exist, suggest the correct city name that the user most likely meant.
 Respond with ONLY the corrected city name, nothing else."""
 
-    try:
-        logger.info(f"Validating city name: '{city_name}'")
+        try:
+            logger.info(f"Validating city name: '{city_name}'")
 
-        model_input = ModelInput(
-            user_prompt=correction_prompt,
-            system_prompt="You are a geography expert. Correct misspelled city names and suggest the most likely city the user meant."
-        )
+            model_input = ModelInput(
+                user_prompt=correction_prompt,
+                system_prompt="You are a geography expert. Correct misspelled city names and suggest the most likely city the user meant."
+            )
 
-        config = ModelConfig(model=model)
-        response = client.generate_content(model_input, config)
+            config = ModelConfig(model=self.model)
+            response = self.client.generate_content(model_input, config)
 
-        if response.text:
-            corrected_name = response.text.strip()
-            if corrected_name.lower() != city_name.lower():
-                logger.info(f"City name corrected from '{city_name}' to '{corrected_name}'")
-                print(f"\n✓ Corrected city name: '{city_name}' → '{corrected_name}'")
-            return corrected_name
-        return city_name
+            if response.text:
+                corrected_name = response.text.strip()
+                if corrected_name.lower() != city_name.lower():
+                    logger.info(f"City name corrected from '{city_name}' to '{corrected_name}'")
+                    print(f"\n✓ Corrected city name: '{city_name}' → '{corrected_name}'")
+                return corrected_name
+            return city_name
 
-    except Exception as e:
-        logger.warning(f"Could not validate city name: {str(e)}")
-        return city_name
+        except Exception as e:
+            logger.warning(f"Could not validate city name: {str(e)}")
+            return city_name
 
 
-def get_city_info(city_name: str, client: PerplexityClient, model: str = "sonar-pro", province: Optional[str] = None, country: Optional[str] = None, length: str = "detail") -> Optional[Dict[str, Any]]:
-    """
-    Get information about a city from Perplexity API.
+    def get_info(self, city_name: str, province: Optional[str] = None, country: Optional[str] = None, length: str = "detail") -> Optional[Dict[str, Any]]:
+        """
+        Get information about a city from Perplexity API.
 
-    Args:
-        city_name: The name of the city
-        client: The PerplexityClient instance
-        model: The model to use for the query (defaults to sonar-pro)
-        province: Optional province or state to search for a specific city
-        country: Optional country to search for a specific city
-        length: Information length - "short" for brief info or "detail" for comprehensive info
+        Args:
+            city_name: The name of the city
+            province: Optional province or state to search for a specific city
+            country: Optional country to search for a specific city
+            length: Information length - "short" for brief info or "detail" for comprehensive info
 
-    Returns:
-        Dictionary with city information including old names, location, climate, attractions, and citations or None if an error occurs
-
-    Raises:
-        ApiError: If there's an issue with the API request
-    """
-    if length == "short":
-        system_prompt = """You are a concise geography and travel assistant. Provide brief, essential structured information about cities. For each city, include only:
+        Returns:
+            Dictionary with city information including old names, location, climate, attractions, and citations or None if an error occurs
+        """
+        if length == "short":
+            system_prompt = """You are a concise geography and travel assistant. Provide brief, essential structured information about cities. For each city, include only:
     - City name (English name)
     - Local name (name in the local language)
     - Nickname (common nicknames)
@@ -132,8 +135,8 @@ def get_city_info(city_name: str, client: PerplexityClient, model: str = "sonar-
     - Country code
     - Key tourist attractions (3-4 main ones)
     - How to reach (brief)"""
-    else:  # detail
-        system_prompt = """You are a comprehensive geography and travel assistant. Provide detailed structured information about cities. For each city, include:
+        else:  # detail
+            system_prompt = """You are a comprehensive geography and travel assistant. Provide detailed structured information about cities. For each city, include:
     - City name (English name)
     - Local name (name in the local language)
     - Nickname (common nicknames or what it's known as, e.g., "The City of Love" for Paris)
@@ -153,210 +156,202 @@ def get_city_info(city_name: str, client: PerplexityClient, model: str = "sonar-
     - Tourist attractions (popular landmarks and sites)
     - How to reach (transportation methods and directions)"""
 
-    # Build user prompt based on whether province/country are provided
-    if province and country:
-        user_prompt = f"Provide detailed information about the city {city_name} in {province}, {country}."
-    elif country:
-        user_prompt = f"Provide detailed information about the city {city_name} in {country}."
-    elif province:
-        user_prompt = f"Provide detailed information about the city {city_name} in {province}."
-    else:
-        user_prompt = f"Provide detailed information about the city: {city_name}. If there are multiple cities with this name, include information about all of them."
-        system_prompt += "\n\nIf there are multiple cities with the same name worldwide, list all of them."
+        # Build user prompt based on whether province/country are provided
+        if province and country:
+            user_prompt = f"Provide detailed information about the city {city_name} in {province}, {country}."
+        elif country:
+            user_prompt = f"Provide detailed information about the city {city_name} in {country}."
+        elif province:
+            user_prompt = f"Provide detailed information about the city {city_name} in {province}."
+        else:
+            user_prompt = f"Provide detailed information about the city: {city_name}. If there are multiple cities with this name, include information about all of them."
+            system_prompt += "\n\nIf there are multiple cities with the same name worldwide, list all of them."
 
-    try:
-        logger.info(f"Sending request to Perplexity API for city: '{city_name}'")
+        try:
+            logger.info(f"Sending request to Perplexity API for city: '{city_name}'")
 
-        model_input = ModelInput(
-            user_prompt=user_prompt,
-            system_prompt=system_prompt,
-            response_model=CityResponse
-        )
+            model_input = ModelInput(
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+                response_model=CityResponse
+            )
 
-        config = ModelConfig(model=model)
+            config = ModelConfig(model=self.model)
 
-        response = client.generate_content(model_input, config)
+            response = self.client.generate_content(model_input, config)
 
-        # Extract the response content
-        logger.info("Successfully received response from API")
+            # Extract the response content
+            logger.info("Successfully received response from API")
 
-        # Structured output was requested, so response.json should contain the parsed model
-        if response.json:
-            logger.info("Successfully parsed structured JSON response")
-            return response.json.model_dump()
+            # Structured output was requested, so response.json should contain the parsed model
+            if response.json:
+                logger.info("Successfully parsed structured JSON response")
+                return response.json.model_dump()
 
-        logger.error("No structured output received in the response.")
-        return None
+            logger.error("No structured output received in the response.")
+            return None
 
-    except Exception as e:
-        logger.error(f"Error querying API: {str(e)}")
-        raise ApiError(f"Error querying Perplexity API: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error querying API: {str(e)}")
+            raise ApiError(f"Error querying Perplexity API: {str(e)}")
 
+    def save_results_to_json(self, city_name: str, data: Dict[str, Any], province: Optional[str] = None, country: Optional[str] = None) -> str:
+        """
+        Save the city information results to a JSON file.
 
-def save_results_to_json(city_name: str, data: Dict[str, Any], province: Optional[str] = None, country: Optional[str] = None) -> str:
-    """
-    Save the city information results to a JSON file.
+        Args:
+            city_name: The city name
+            data: The parsed response data from the API
+            province: Optional province/state
+            country: Optional country
 
-    Args:
-        city_name: The city name
-        data: The parsed response data from the API
-        province: Optional province/state
-        country: Optional country
+        Returns:
+            The filename where the data was saved
+        """
+        # Build filename
+        filename_parts = [city_name]
+        if province:
+            filename_parts.append(province)
+        if country:
+            filename_parts.append(country)
 
-    Returns:
-        The filename where the data was saved
-    """
-    # Build filename
-    filename_parts = [city_name]
-    if province:
-        filename_parts.append(province)
-    if country:
-        filename_parts.append(country)
+        filename = "_".join(filename_parts) + ".json"
 
-    filename = "_".join(filename_parts) + ".json"
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
 
-    try:
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Results saved to {filename}")
+            print(f"\n✅ Results saved to: {filename}")
+            return filename
 
-        logger.info(f"Results saved to {filename}")
-        print(f"\n✅ Results saved to: {filename}")
-        return filename
+        except Exception as e:
+            logger.error(f"Error saving results to JSON: {str(e)}")
+            print(f"\n❌ Error saving results to JSON: {str(e)}")
+            return None
 
-    except Exception as e:
-        logger.error(f"Error saving results to JSON: {str(e)}")
-        print(f"\n❌ Error saving results to JSON: {str(e)}")
-        return None
+    def display_results(self, city_name: str, data: Optional[Dict[str, Any]]) -> None:
+        """
+        Display the city information results in a formatted terminal output.
 
+        Args:
+            city_name: The original city name searched
+            data: The parsed response data from the API
+        """
+        if not data:
+            print("\n❌ No data received from API")
+            return
 
-def display_results(city_name: str, data: Optional[Dict[str, Any]]) -> None:
-    """
-    Display the city information results in a formatted terminal output.
+        print("\n" + "=" * 70)
+        print(f"City Search: {city_name}")
+        print("=" * 70)
 
-    Args:
-        city_name: The original city name searched
-        data: The parsed response data from the API
-    """
-    if not data:
-        print("\n❌ No data received from API")
-        return
+        cities = data.get("cities", [])
 
-    print("\n" + "=" * 70)
-    print(f"City Search: {city_name}")
-    print("=" * 70)
+        if not cities:
+            print("\n❌ No cities found")
+            return
 
-    cities = data.get("cities", [])
+        def is_empty(value):
+            """Check if a value is empty or 'N/A'."""
+            return value is None or value == "" or value == "N/A"
 
-    if not cities:
-        print("\n❌ No cities found")
-        return
+        # Display information for each city
+        for idx, city in enumerate(cities, 1):
+            if len(cities) > 1:
+                print(f"\n{'─' * 70}")
+                print(f"City {idx}: {city.get('city_name', 'N/A')}")
+                print(f"{'─' * 70}")
 
-    # Display information for each city
-    for idx, city in enumerate(cities, 1):
-        if len(cities) > 1:
-            print(f"\n{'─' * 70}")
-            print(f"CITY {idx}: {city.get('city_name', 'N/A')}")
-            print(f"{'─' * 70}")
+            # Display Local Name
+            if not is_empty(city.get("local_name")):
+                print("\n🗣️  Local Name:")
+                print(city.get("local_name"))
 
-        # Display Local Name
-        print("\n🗣️  LOCAL NAME:")
-        print("-" * 70)
-        print(city.get("local_name", "N/A"))
+            # Display Nickname
+            if not is_empty(city.get("nickname")):
+                print("\n🏷️  Nickname:")
+                print(city.get("nickname"))
 
-        # Display Nickname
-        print("\n🏷️  NICKNAME:")
-        print("-" * 70)
-        print(city.get("nickname", "N/A"))
+            # Display Old Names
+            if not is_empty(city.get("old_names")):
+                print("\n📜 Old Names:")
+                print(city.get("old_names"))
 
-        # Display Old Names
-        print("\n📜 OLD NAMES:")
-        print("-" * 70)
-        print(city.get("old_names", "N/A"))
+            # Display Etymology
+            if not is_empty(city.get("etymology")):
+                print("\n📖 Etymology:")
+                print(city.get("etymology"))
 
-        # Display Etymology
-        print("\n📖 ETYMOLOGY:")
-        print("-" * 70)
-        print(city.get("etymology", "N/A"))
+            # Display History
+            if not is_empty(city.get("history")):
+                print("\n📚 History:")
+                print(city.get("history"))
 
-        # Display History
-        print("\n📚 HISTORY:")
-        print("-" * 70)
-        print(city.get("history", "N/A"))
+            # Display Province and Country
+            if not is_empty(city.get("province_and_country")):
+                print("\n🗺️  Province & Country:")
+                print(city.get("province_and_country"))
 
-        # Display Province and Country
-        print("\n🗺️  PROVINCE & COUNTRY:")
-        print("-" * 70)
-        print(city.get("province_and_country", "N/A"))
+            # Display Coordinates
+            latitude = city.get("latitude")
+            longitude = city.get("longitude")
+            if not is_empty(latitude) or not is_empty(longitude):
+                print("\n📍 Coordinates:")
+                if not is_empty(latitude):
+                    print(f"  Latitude:  {latitude}")
+                if not is_empty(longitude):
+                    print(f"  Longitude: {longitude}")
 
-        # Display Coordinates
-        print("\n📍 COORDINATES:")
-        print("-" * 70)
-        latitude = city.get("latitude", "N/A")
-        longitude = city.get("longitude", "N/A")
-        print(f"  Latitude:  {latitude}")
-        print(f"  Longitude: {longitude}")
+            # Display Area
+            if not is_empty(city.get("area")):
+                print("\n📐 Area:")
+                print(city.get("area"))
 
-        # Display Area
-        print("\n📐 AREA:")
-        print("-" * 70)
-        print(city.get("area", "N/A"))
+            # Display Elevation
+            if not is_empty(city.get("elevation")):
+                print("\n⛰️  Elevation:")
+                print(city.get("elevation"))
 
-        # Display Elevation
-        print("\n⛰️  ELEVATION:")
-        print("-" * 70)
-        print(city.get("elevation", "N/A"))
+            # Display Geography
+            if not is_empty(city.get("geography")):
+                print("\n🏔️  Geography:")
+                print(city.get("geography"))
 
-        # Display Geography
-        print("\n🏔️  GEOGRAPHY:")
-        print("-" * 70)
-        print(city.get("geography", "N/A"))
+            # Display Climate
+            if not is_empty(city.get("climate")):
+                print("\n🌤️  Climate:")
+                print(city.get("climate"))
 
-        # Display Climate
-        print("\n🌤️  CLIMATE:")
-        print("-" * 70)
-        print(city.get("climate", "N/A"))
+            # Display Demographics
+            if not is_empty(city.get("demographics")):
+                print("\n👥 Demographics:")
+                print(city.get("demographics"))
 
-        # Display Demographics
-        print("\n👥 DEMOGRAPHICS:")
-        print("-" * 70)
-        print(city.get("demographics", "N/A"))
+            # Display Time Zone
+            if not is_empty(city.get("time_zone")):
+                print("\n🕐 Time Zone:")
+                print(city.get("time_zone"))
 
-        # Display Time Zone
-        print("\n🕐 TIME ZONE:")
-        print("-" * 70)
-        print(city.get("time_zone", "N/A"))
+            # Display Telephone Code
+            if not is_empty(city.get("telephone_code")):
+                print("\n☎️  Telephone Code:")
+                print(city.get("telephone_code"))
 
-        # Display Telephone Code
-        print("\n☎️  TELEPHONE CODE:")
-        print("-" * 70)
-        print(city.get("telephone_code", "N/A"))
+            # Display Country Code
+            if not is_empty(city.get("country_code")):
+                print("\n🏳️  Country Code:")
+                print(city.get("country_code"))
 
-        # Display Country Code
-        print("\n🏳️  COUNTRY CODE:")
-        print("-" * 70)
-        print(city.get("country_code", "N/A"))
+            # Display Tourist Attractions
+            if not is_empty(city.get("tourist_attractions")):
+                print("\n🎭 Tourist Attractions:")
+                print(city.get("tourist_attractions"))
 
-        # Display Tourist Attractions
-        print("\n🎭 TOURIST ATTRACTIONS:")
-        print("-" * 70)
-        print(city.get("tourist_attractions", "N/A"))
-
-        # Display How to Reach
-        print("\n🚗 HOW TO REACH:")
-        print("-" * 70)
-        print(city.get("how_to_reach", "N/A"))
-
-    # Display Citations
-    citations = data.get("citations", [])
-    if citations:
-        print("\n📚 CITATIONS:")
-        print("-" * 70)
-        for i, citation in enumerate(citations, 1):
-            print(f"  {i}. {citation}")
-    else:
-        print("\n📚 CITATIONS: None provided")
-
-    print("\n" + "=" * 70 + "\n")
+            # Display How to Reach
+            if not is_empty(city.get("how_to_reach")):
+                print("\n🚗 How to Reach:")
+                print(city.get("how_to_reach"))
 
 
 def main():
@@ -420,26 +415,26 @@ Examples:
         logger.setLevel(logging.INFO)
 
     try:
-        # Initialize the Perplexity client
-        client = PerplexityClient()
-        logger.info("Perplexity client initialized successfully")
+        # Initialize the CityGuide
+        guide = CityGuide(model=args.model)
+        logger.info("CityGuide initialized successfully")
 
         # Validate and correct city name if needed
         print(f"\n🔍 Validating city name: '{args.city_name}'")
-        corrected_city_name = correct_city_name(args.city_name, client, model=args.model)
+        corrected_city_name = guide.correct_name(args.city_name)
 
         # Query the API
         print(f"\n🔄 Querying Perplexity API for: '{corrected_city_name}'")
         print("Please wait...\n")
 
-        result = get_city_info(corrected_city_name, client, model=args.model, province=args.province, country=args.country, length=args.length)
+        result = guide.get_info(corrected_city_name, province=args.province, country=args.country, length=args.length)
 
         # Display results
         if result:
-            display_results(corrected_city_name, result)
+            guide.display_results(corrected_city_name, result)
 
             # Save results to JSON
-            save_results_to_json(corrected_city_name, result, province=args.province, country=args.country)
+            guide.save_results_to_json(corrected_city_name, result, province=args.province, country=args.country)
         else:
             print("\n❌ Failed to get a valid response from the API")
             sys.exit(1)
