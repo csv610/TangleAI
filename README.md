@@ -69,8 +69,8 @@ client = PerplexityClient()
 
 # Simple query
 model_input = ModelInput(user_prompt="What is quantum computing?")
-response = client.generate_content(model_input)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input)
+print(output.text)
 
 # Query with custom configuration
 config = ModelConfig(
@@ -78,16 +78,16 @@ config = ModelConfig(
     temperature=0.7,
     max_tokens=2048
 )
-response = client.generate_content(model_input, config)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input, config)
+print(output.text)
 
 # Query with system prompt
 model_input = ModelInput(
     user_prompt="Explain quantum entanglement",
     system_prompt="You are a physics expert. Explain concepts clearly."
 )
-response = client.generate_content(model_input, config)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input, config)
+print(output.text)
 ```
 
 ### Using Search Filters
@@ -107,8 +107,8 @@ search_filter = SearchFilter(
 model_input = ModelInput(user_prompt="Recent breakthroughs in machine learning")
 config = ModelConfig(return_related_questions=True)
 
-response = client.generate_content(model_input, config, search_filter)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input, config, search_filter)
+print(output.text)
 ```
 
 ### Structured Output
@@ -131,8 +131,8 @@ model_input = ModelInput(
     response_model=ResearchResult
 )
 
-response = client.generate_content(model_input)
-result = ResearchResult.model_validate_json(response.choices[0].message.content)
+output = client.generate_content(model_input)
+result = output.json  # Already parsed by ModelOutput
 print(result)
 ```
 
@@ -238,7 +238,9 @@ Perplexity/
     ├── medicine_lookup.py         # Medicine information lookup
     ├── drugbank_medicine.py       # DrugBank API integration
     ├── perplx_client_cli.py       # CLI interface
+    ├── logging_utils.py           # Centralized logging configuration
     ├── medhelp.py                 # Medical help application
+    ├── hilbert_problems.py        # Hilbert problems research
     └── test_disease_qa.py         # Disease QA tests
 ```
 
@@ -259,11 +261,16 @@ client.generate_content(
     model_input: ModelInput,
     config: Optional[ModelConfig] = None,
     search_filter: Optional[SearchFilter] = None
-) -> ChatCompletion
+) -> ModelOutput
     """Generate content based on input and configuration.
 
-    Returns a ChatCompletion response with choices[0].message.content
-    containing the assistant's response.
+    Returns a ModelOutput dataclass with parsed content and metadata:
+    - text: Plain text response (str, if response_model not provided)
+    - json: Parsed structured output (Pydantic model, if response_model provided)
+    - search_results: List of sources and snippets
+    - related_questions: Follow-up questions
+    - images: Returned images
+    - Token usage and other metadata
     """
 ```
 
@@ -325,8 +332,8 @@ model_input = ModelInput(
     response_model=DiseaseInfo
 )
 
-response = client.generate_content(model_input)
-disease_data = DiseaseInfo.model_validate_json(response.choices[0].message.content)
+output = client.generate_content(model_input)
+disease_data = output.json  # Already parsed by ModelOutput
 print(f"Disease: {disease_data.name}")
 print(f"Symptoms: {disease_data.symptoms}")
 print(f"Treatments: {disease_data.treatment_options}")
@@ -356,8 +363,10 @@ config = ModelConfig(
     return_related_questions=True
 )
 
-response = client.generate_content(model_input, config, search_filter)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input, config, search_filter)
+print(output.text)
+print("Related questions:", output.related_questions)
+print("Sources:", output.search_results)
 ```
 
 ### Example 3: Multi-Modal Query with PDF
@@ -374,8 +383,8 @@ model_input = ModelInput(
     system_prompt="You are an expert research analyst. Be concise and precise."
 )
 
-response = client.generate_content(model_input)
-print(response.choices[0].message.content)
+output = client.generate_content(model_input)
+print(output.text)
 ```
 
 ### Example 4: Temperature Control for Creativity
@@ -389,12 +398,14 @@ client = PerplexityClient()
 # Low temperature for factual, deterministic responses
 factual_config = ModelConfig(temperature=0.1)
 model_input = ModelInput(user_prompt="What is the capital of France?")
-response = client.generate_content(model_input, factual_config)
+output = client.generate_content(model_input, factual_config)
+print(output.text)
 
 # High temperature for creative responses
 creative_config = ModelConfig(temperature=1.5)
 model_input = ModelInput(user_prompt="Generate a creative story about AI")
-response = client.generate_content(model_input, creative_config)
+output = client.generate_content(model_input, creative_config)
+print(output.text)
 ```
 
 ## Testing
@@ -491,7 +502,15 @@ For issues, questions, or suggestions:
 
 ## Changelog
 
-### Version 0.2.0 (Current)
+### Version 0.2.1 (Current)
+- Refactored `generate_content()` to return `ModelOutput` dataclass for improved type safety
+- `ModelOutput` includes parsed structured output, metadata, search results, and token usage
+- Extracted logging setup into reusable `logging_utils` module
+- Added new applications: `medhelp`, `hilbert_problems`
+- Simplified service initialization with sensible defaults
+- All modules updated to use structured output and centralized logging
+
+### Version 0.2.0
 - Core `PerplexityClient` with flexible configuration
 - `ModelConfig` with 13 parameters for fine-grained control
 - `SearchFilter` high-level abstraction for domain and date filtering
