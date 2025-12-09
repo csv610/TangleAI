@@ -1,5 +1,4 @@
 import os
-import logging
 import sys
 import random
 from datetime import datetime
@@ -9,19 +8,10 @@ from typing import Dict, Union
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tangle'))
 
 from perplx_client import PerplexityClient
-from config import ModelConfig, ModelInput
+from config import ModelConfig, ModelInput, SearchFilter
+from logging_utils import setup_logging
 
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("daily_knowledge_bot.log"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("daily_knowledge_bot")
+logger = setup_logging("daily_knowledge_bot.log")
 
 
 class ConfigurationError(Exception):
@@ -32,17 +22,10 @@ class ConfigurationError(Exception):
 class DailyFactService:
     """Service to manage retrieval and storage of daily facts."""
 
-    def __init__(self, client: PerplexityClient, output_dir: Path = None):
-        """
-        Initialize the daily fact service.
-
-        Args:
-            client: Perplexity API client
-            output_dir: Directory to save fact files
-        """
-        self.client = client
-        self.output_dir = output_dir or Path.cwd()
-        self.output_dir.mkdir(exist_ok=True)
+    def __init__(self):
+        """Initialize the daily fact service."""
+        self.client = PerplexityClient()
+        self.output_dir = Path.cwd()
 
         # Default topics
         self.topics = [
@@ -59,11 +42,7 @@ class DailyFactService:
         ]
 
         # Model configuration for fact generation
-        self.model_config = ModelConfig(
-            model="sonar",
-            max_tokens=150,
-            temperature=0.7
-        )
+        self.model_config = ModelConfig()
     
     def load_topics_from_file(self, filepath: Union[str, Path]) -> None:
         """
@@ -114,13 +93,17 @@ class DailyFactService:
         """
         return random.choice(self.topics)
     
-    def get_and_save_daily_fact(self) -> Dict[str, str]:
+    def generate(self, output_dir: Path = None) -> Dict[str, str]:
         """
-        Get today's fact and save it to a file.
+        Generate today's fact and save it to a file.
+
+        Args:
+            output_dir: Optional directory to save the fact file. Uses instance output_dir if not provided.
 
         Returns:
             Dictionary with topic, fact, and file information
         """
+        output_dir = output_dir or self.output_dir
         # Try to get the daily topic, fall back to random if there's an error
         try:
             topic = self.get_daily_topic()
@@ -131,8 +114,11 @@ class DailyFactService:
         logger.info(f"Getting today's fact about: {topic}")
 
         try:
+            # Create search filter for daily content
+            search_filter = SearchFilter(recency="day")
+
             # Create model input for fact generation
-            system_prompt = "You are a helpful assistant that provides interesting, accurate, and concise facts. Respond with only one fascinating fact, kept under 100 words."
+            system_prompt = "You are a helpful assistant that provides interesting, accurate, and concise facts. Respond with only one fascinating fact, kept under 250 words."
             user_prompt = f"Tell me an interesting fact about {topic} that most people don't know."
 
             model_input = ModelInput(
@@ -140,16 +126,16 @@ class DailyFactService:
                 system_prompt=system_prompt
             )
 
-            response = self.client.generate_content(model_input, self.model_config)
-            fact = response.choices[0].message.content
+            response = self.client.generate_content(model_input, self.model_config, search_filter)
+            fact = response.text
 
             # Save the fact
-            timestamp = datetime.now().strftime("%Y-%m-%d")
-            filename = self.output_dir / f"daily_fact_{timestamp}.txt"
+            timestamp = datetime.now().strftime("%d-%m-%Y")
+            filename = output_dir / f"daily_fact_{timestamp}.txt"
 
             with open(filename, "w") as f:
-                f.write(f"DAILY FACT - {timestamp}\n")
-                f.write(f"Topic: {topic}\n\n")
+                f.write(f"Time  : {timestamp}\n")
+                f.write(f"Topic : {topic}\n\n")
                 f.write(fact)
 
             logger.info(f"Fact saved to {filename}")
@@ -172,7 +158,7 @@ def load_config() -> Dict[str, str]:
         Dictionary of configuration values
     """
     # Get output directory from environment variables or use default
-    output_dir = os.environ.get("OUTPUT_DIR", "./facts")
+    output_dir = os.environ.get("OUTPUT_DIR", "./outputs/facts")
 
     # Get topics file path from environment variables
     topics_file = os.environ.get("TOPICS_FILE", "./topics.txt")
@@ -189,22 +175,17 @@ def main():
         # Load configuration
         config = load_config()
 
-        # Initialize API client
-        client = PerplexityClient()
-
-        # Create output directory
-        output_dir = Path(config["output_dir"])
-        output_dir.mkdir(exist_ok=True)
-
         # Initialize service
-        fact_service = DailyFactService(client, output_dir)
+        fact_service = DailyFactService()
 
         # Load custom topics if available
         if config["topics_file"]:
             fact_service.load_topics_from_file(config["topics_file"])
 
-        # Get and save today's fact
-        result = fact_service.get_and_save_daily_fact()
+        # Generate and save today's fact
+        output_dir = Path(config["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        result = fact_service.generate(output_dir)
 
         # Display the results
         print(f"\nToday's {result['topic']} fact: {result['fact']}")

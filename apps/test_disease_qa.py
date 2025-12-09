@@ -82,8 +82,10 @@ class TestAskDiseaseQuestion:
         }
 
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps(response_data)
+        mock_json = MagicMock()
+        mock_json.model_dump.return_value = response_data
+        mock_response.json = mock_json
+        mock_response.text = None
 
         self.mock_client.generate_content.return_value = mock_response
 
@@ -95,28 +97,10 @@ class TestAskDiseaseQuestion:
         assert result["treatments"] == "Medication and diet"
         assert len(result["citations"]) == 1
 
-    def test_ask_disease_question_success_text(self):
-        """Test successful API response with plain text content."""
-        text_response = "Diabetes is a metabolic disorder affecting blood sugar levels."
-
+    def test_ask_disease_question_no_json_response(self):
+        """Test API response with no structured output."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = text_response
-
-        self.mock_client.generate_content.return_value = mock_response
-
-        result = ask_disease_question("What is diabetes?", self.mock_client)
-
-        assert result is not None
-        assert result["overview"] == text_response
-        assert result["causes"] == "See overview for details"
-        assert result["treatments"] == "See overview for details"
-        assert result["citations"] == []
-
-    def test_ask_disease_question_empty_choices(self):
-        """Test API response with no choices."""
-        mock_response = MagicMock()
-        mock_response.choices = []
+        mock_response.json = None
 
         self.mock_client.generate_content.return_value = mock_response
 
@@ -136,12 +120,14 @@ class TestAskDiseaseQuestion:
     def test_ask_disease_question_model_parameter(self):
         """Test that model parameter is passed correctly."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
+        mock_json = MagicMock()
+        mock_json.model_dump.return_value = {
             "overview": "Test",
             "causes": "Test",
             "treatments": "Test"
-        })
+        }
+        mock_response.json = mock_json
+        mock_response.text = None
 
         self.mock_client.generate_content.return_value = mock_response
 
@@ -153,12 +139,14 @@ class TestAskDiseaseQuestion:
     def test_ask_disease_question_system_prompt(self):
         """Test that system prompt is set correctly."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
+        mock_json = MagicMock()
+        mock_json.model_dump.return_value = {
             "overview": "Test",
             "causes": "Test",
             "treatments": "Test"
-        })
+        }
+        mock_response.json = mock_json
+        mock_response.text = None
 
         self.mock_client.generate_content.return_value = mock_response
 
@@ -399,8 +387,10 @@ class TestIntegration:
         }
 
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps(response_data)
+        mock_json = MagicMock()
+        mock_json.model_dump.return_value = response_data
+        mock_response.json = mock_json
+        mock_response.text = None
         mock_client.generate_content.return_value = mock_response
 
         with patch('sys.argv', ['disease_qa.py', 'What causes asthma?']):

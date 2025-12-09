@@ -1,11 +1,11 @@
 """Configuration for available models and vision processing parameters."""
 
-from dataclasses import dataclass
-from typing import Optional, Type, Any
+from dataclasses import dataclass, field
+from typing import Optional, Type, Any, List
 from pydantic import BaseModel
 
 # Vision model defaults
-DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TEMPERATURE = 0.2
 DEFAULT_MAX_TOKENS = 2000
 DEFAULT_PROMPT = "Describe this image in detail"
 
@@ -106,19 +106,20 @@ class ModelConfig:
     """Configuration for model interactions."""
 
     model: str = "sonar"
-    max_tokens: int = 1024
-    temperature: float = 0.7
-    top_p: float = 0.9
-    stream: bool = False
-    search_mode: str = "web"
+    disable_search: bool = False
+    frequency_penalty: float = 0.0
+    language_preference: str = "en"
+    max_tokens: int = 8000
+    presence_penalty: float = 0.0
     reasoning_effort: str = "medium"
     return_images: bool = False
     return_related_questions: bool = False
-    language_preference: str = "en"
+    return_citations: bool = True
+    search_mode: str = "web"
+    stream: bool = False
+    temperature: float = 0.2
+    top_p: float = 0.9
     top_k: int = 0
-    presence_penalty: float = 0.0
-    frequency_penalty: float = 0.0
-    disable_search: bool = False
 
 
 @dataclass
@@ -158,3 +159,52 @@ class ModelInput:
                     raise ValueError("response_model must be a Pydantic BaseModel class")
             except TypeError:
                 raise ValueError("response_model must be a Pydantic BaseModel class")
+
+
+@dataclass
+class ModelOutput:
+    """Output from LLM model interactions.
+
+    Either 'text' or 'json' will be populated depending on whether response_model was provided.
+    If response_model was provided, 'json' contains the parsed model instance and 'text' may be None.
+    If no response_model was provided, 'text' contains the response and 'json' will be None.
+    """
+
+    model: str
+    """Model identifier used for the request."""
+
+    finish_reason: str
+    """Reason for finishing the response (e.g., 'stop', 'max_tokens')."""
+
+    prompt_tokens: int
+    """Number of tokens in the input prompt."""
+
+    completion_tokens: int
+    """Number of tokens in the completion."""
+
+    total_tokens: int
+    """Total number of tokens used."""
+
+    text: Optional[str] = None
+    """The main response text from the model (available when no response_model provided)."""
+
+    json: Optional[BaseModel] = None
+    """Parsed model instance if response_model was provided (available only when response_model provided)."""
+
+    search_results: List[dict] = field(default_factory=list)
+    """Search results returned by the API if available."""
+
+    related_questions: List[str] = field(default_factory=list)
+    """Related questions suggested by the model if available."""
+
+    images: List[str] = field(default_factory=list)
+    """Image URLs returned by the model if return_images was enabled."""
+
+    search_context_size: Optional[int] = None
+    """Size of search context window if available."""
+
+    citation_tokens: Optional[int] = None
+    """Number of citation tokens if available."""
+
+    num_search_queries: Optional[int] = None
+    """Number of search queries performed if available."""

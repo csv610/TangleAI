@@ -9,6 +9,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tangle'))
 from pydantic import BaseModel
 from perplx_client import PerplexityClient
 from config import ModelConfig, ModelInput
+from logging_utils import setup_logging
+
+logger = setup_logging("paper_review.log")
 
 
 class PaperReview(BaseModel):
@@ -67,8 +70,10 @@ class PaperReviewer:
             ValueError: If analysis fails
         """
         if not os.path.exists(pdf_file):
+            logger.error(f"PDF file not found: {pdf_file}")
             raise FileNotFoundError(f"PDF file not found: {pdf_file}")
 
+        logger.info(f"Analyzing paper: {pdf_file}")
         print(f"Analyzing paper: {pdf_file}")
 
         # Create model input with PDF and structured output
@@ -80,19 +85,24 @@ class PaperReviewer:
 
         try:
             # Call Perplexity API with PDF and structured output
+            logger.info(f"Sending API request for paper analysis: {pdf_file}")
             response = self.client.generate_content(model_input, self.config)
 
-            # Validate and parse the response
-            paper_review = PaperReview.model_validate_json(
-                response.choices[0].message.content
-            )
+            # Structured output was requested, so response.json should contain the parsed model
+            if not response.json:
+                logger.error(f"No structured output received for paper: {pdf_file}")
+                raise ValueError("No structured output received from API")
 
+            paper_review = response.json
+            logger.info(f"Successfully analyzed paper: {paper_review.title}")
             print(f"  ✓ Successfully analyzed paper: {paper_review.title}")
             return paper_review
 
         except ValueError as e:
+            logger.error(f"Failed to analyze paper: {str(e)}")
             raise ValueError(f"Failed to analyze paper: {str(e)}")
         except Exception as e:
+            logger.error(f"Error during paper analysis: {str(e)}")
             raise Exception(f"Error during paper analysis: {str(e)}")
 
     def format_output(self, result) -> None:
@@ -181,22 +191,32 @@ if __name__ == "__main__":
     pdf_file = sys.argv[1]
     prompt = sys.argv[2] if len(sys.argv) > 2 else "Please carefully read the PDF and review it comprehensively. Provide a detailed academic analysis covering all the required fields."
 
+    logger.info(f"Starting paper review for: {pdf_file}")
     try:
         reviewer = PaperReviewer()
         result = reviewer.generate_text(pdf_file, prompt)
         reviewer.format_output(result)
 
+        # Create outputs directory if it doesn't exist
+        output_dir = os.path.join(os.path.dirname(__file__), "outputs", "paper_reviews")
+        os.makedirs(output_dir, exist_ok=True)
+
         # Save to JSON
-        output_file = f"{os.path.splitext(pdf_file)[0]}_review.json"
+        pdf_basename = os.path.basename(os.path.splitext(pdf_file)[0])
+        output_file = os.path.join(output_dir, f"{pdf_basename}_review.json")
+        logger.info(f"Saving review to: {output_file}")
         with open(output_file, 'w') as f:
             json.dump(result.model_dump(mode='json'), f, indent=2)
 
+        logger.info(f"Review saved successfully to: {output_file}")
         print(f"\nFull review saved to: {output_file}")
 
     except FileNotFoundError as e:
+        logger.error(f"File error: {e}")
         print(f"Error: {e}")
         sys.exit(1)
     except Exception as e:
+        logger.error(f"Error during paper review: {str(e)}")
         print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()

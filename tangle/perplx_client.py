@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 from perplexity import Perplexity
 from typing import Dict, Any, List, Optional
-from config import ModelConfig, ModelInput, SearchFilter
+from config import ModelConfig, ModelInput, ModelOutput, SearchFilter
 from image_utils import ImageUtils
 
 
@@ -143,7 +143,7 @@ class PerplexityClient:
 
         return api_params
 
-    def generate_content(self, model_input: ModelInput, config: Optional[ModelConfig] = None, search_filter: Optional[SearchFilter] = None) -> Dict[str, Any]:
+    def generate_content(self, model_input: ModelInput, config: Optional[ModelConfig] = None, search_filter: Optional[SearchFilter] = None) -> ModelOutput:
         """
         Generate content using the Perplexity API.
 
@@ -155,14 +155,15 @@ class PerplexityClient:
                           Provides an easy way to filter domains, dates, and recency.
 
         Returns:
-            Complete API response object
+            ModelOutput dataclass with response content and metadata
 
         Example:
             >>> filter = SearchFilter(
             ...     allowed_domains=["nasa.gov", "wikipedia.org"],
             ...     recency="week"
             ... )
-            >>> response = client.generate_content(model_input, search_filter=filter)
+            >>> output = client.generate_content(model_input, search_filter=filter)
+            >>> print(output.text or output.json)
         """
         # Use provided config, fall back to constructor config, or create default one
         if config is None:
@@ -171,7 +172,59 @@ class PerplexityClient:
         api_params = self._build_api_params(model_input, config, search_filter)
         response = self.client.chat.completions.create(**api_params)
 
-        return response
+        # Extract main content
+        content = response.choices[0].message.content
+
+        # Parse structured output if response_model was provided
+        json_output = None
+        if model_input.response_model is not None:
+            json_output = model_input.response_model.model_validate_json(content)
+            text = None
+        else:
+            text = content
+
+        # Extract search results if available
+        search_results = []
+        if hasattr(response, 'search_results') and response.search_results:
+            search_results = [
+                {
+                    "title": result.title,
+                    "url": result.url,
+                    "snippet": getattr(result, 'snippet', None)
+                }
+                for result in response.search_results
+            ]
+
+        # Extract related questions if available
+        related_questions = []
+        if hasattr(response, 'related_questions') and response.related_questions:
+            related_questions = response.related_questions
+
+        # Extract images if available
+        images = []
+        if hasattr(response, 'images') and response.images:
+            images = response.images
+
+        # Extract optional usage metrics
+        search_context_size = getattr(response.usage, 'search_context_size', None)
+        citation_tokens = getattr(response.usage, 'citation_tokens', None)
+        num_search_queries = getattr(response.usage, 'num_search_queries', None)
+
+        return ModelOutput(
+            text=text,
+            json=json_output,
+            model=response.model,
+            finish_reason=response.choices[0].finish_reason,
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+            total_tokens=response.usage.total_tokens,
+            search_results=search_results,
+            related_questions=related_questions,
+            images=images,
+            search_context_size=search_context_size,
+            citation_tokens=citation_tokens,
+            num_search_queries=num_search_queries
+        )
 
 
 def main():
@@ -247,39 +300,42 @@ def main():
     # Make the API call
     print("Calling Perplexity Chat Completions API...")
     client = PerplexityClient()
-    response = client.generate_content(model_input, config)
-    
-    # Print complete response structure
-    print("\n=== COMPLETE API RESPONSE ===")
-    print(f"ID: {response.id}")
-    print(f"Model: {response.model}")
-    print(f"Object: {response.object}")
-    print(f"Created: {response.created}")
-    
+    output = client.generate_content(model_input, config)
+
+    # Print response metadata
+    print("\n=== API RESPONSE ===")
+    print(f"Model: {output.model}")
+    print(f"Finish reason: {output.finish_reason}")
+
     print("\nUsage:")
-    print(f"  Prompt tokens: {response.usage.prompt_tokens}")
-    print(f"  Completion tokens: {response.usage.completion_tokens}")
-    print(f"  Total tokens: {response.usage.total_tokens}")
-    if hasattr(response.usage, 'search_context_size'):
-        print(f"  Search context size: {getattr(response.usage, 'search_context_size', 'N/A')}")
-    if hasattr(response.usage, 'citation_tokens'):
-        print(f"  Citation tokens: {getattr(response.usage, 'citation_tokens', 'N/A')}")
-    if hasattr(response.usage, 'num_search_queries'):
-        print(f"  Search queries: {getattr(response.usage, 'num_search_queries', 'N/A')}")
-    
-    print("\nChoices:")
-    for i, choice in enumerate(response.choices):
-        print(f"  Choice {i}:")
-        print(f"    Finish reason: {choice.finish_reason}")
-        print(f"    Content: {choice.message.content[:200]}...")
-    
-    if hasattr(response, 'search_results') and response.search_results:
+    print(f"  Prompt tokens: {output.prompt_tokens}")
+    print(f"  Completion tokens: {output.completion_tokens}")
+    print(f"  Total tokens: {output.total_tokens}")
+    if output.search_context_size is not None:
+        print(f"  Search context size: {output.search_context_size}")
+    if output.citation_tokens is not None:
+        print(f"  Citation tokens: {output.citation_tokens}")
+    if output.num_search_queries is not None:
+        print(f"  Search queries: {output.num_search_queries}")
+
+    # Print search results if available
+    if output.search_results:
         print("\nSearch Results:")
-        for result in response.search_results[:3]:  # First 3
-            print(f"  - {result.title}: {result.url}")
-    
-    print("\nFull assistant response:")
-    print(response.choices[0].message.content)
+        for result in output.search_results[:3]:  # First 3
+            print(f"  - {result['title']}: {result['url']}")
+
+    # Print related questions if available
+    if output.related_questions:
+        print("\nRelated Questions:")
+        for question in output.related_questions[:3]:  # First 3
+            print(f"  - {question}")
+
+    # Print main response
+    print("\nResponse:")
+    if output.text:
+        print(output.text)
+    elif output.json:
+        print(output.json.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":

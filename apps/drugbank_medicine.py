@@ -10,6 +10,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tangle'))
 
 from perplx_client import PerplexityClient
 from config import ModelConfig, ModelInput
+from logging_utils import setup_logging
+
+logger = setup_logging("drugbank_medicine.log")
 
 
 class DrugType(str, Enum):
@@ -306,6 +309,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     medicine_name = " ".join(sys.argv[1:])
+    logger.info(f"Starting medicine lookup for: {medicine_name}")
 
     # Configure the model for structured output
     config = ModelConfig(
@@ -325,66 +329,24 @@ if __name__ == "__main__":
 
     # Initialize client and generate content
     try:
+        logger.info("Initializing Perplexity client")
         client = PerplexityClient()
+        logger.info(f"Sending request to Perplexity API for: {medicine_name}")
         response = client.generate_content(model_input, config)
 
-        response_content = response.choices[0].message.content
+        # Structured output was requested, so response.json should contain the parsed model
+        if not response.json:
+            logger.error("No structured output received from API")
+            print("Error: No structured output received from API")
+            sys.exit(1)
 
-        # Attempt to fix truncated JSON if needed
-        import json as json_module
-        import re
-        try:
-            medicine = MedicineInfo.model_validate_json(response_content)
-        except json_module.JSONDecodeError as e:
-            # If JSON is truncated, try to fix it by closing incomplete structures
-            print("⚠️  Response was truncated, attempting to repair JSON...")
-
-            # Remove incomplete final string and trailing characters
-            # Find the last complete quoted string and remove anything after it if truncated
-            response_content = response_content.rstrip()
-
-            # If it ends with an incomplete string, remove it
-            if '"' in response_content[-10:]:
-                # Find the last complete key-value pair
-                last_quote = response_content.rfind('":', 0, -5)
-                if last_quote > 0:
-                    # Find the next quote after the colon
-                    next_quote = response_content.find('"', last_quote + 2)
-                    if next_quote > 0:
-                        # Check if this string is complete
-                        try:
-                            # Try to find the closing quote
-                            close_quote = response_content.find('"', next_quote + 1)
-                            if close_quote < 0 or close_quote > len(response_content) - 10:
-                                # String is incomplete, truncate before it
-                                response_content = response_content[:last_quote + 1]
-
-                        except:
-                            response_content = response_content[:last_quote + 1]
-
-            # Clean up trailing comma or bracket
-            response_content = response_content.rstrip(',')
-
-            # Ensure proper closing
-            if not response_content.endswith('}'):
-                # Count braces to balance them
-                open_braces = response_content.count('{') - response_content.count('}')
-                response_content += '}' * (open_braces + 1)
-
-            try:
-                medicine = MedicineInfo.model_validate_json(response_content)
-            except Exception:
-                # If still failing, use minimal data to at least show something
-                print("⚠️  Could not parse response, using fallback...")
-                medicine = MedicineInfo(
-                    name=medicine_name.title(),
-                    indication="Unable to retrieve full information from API"
-                )
-
+        logger.info(f"Successfully retrieved medicine information for: {medicine_name}")
+        medicine = response.json
         print(f"\nMedicine: {medicine.name}")
         print(f"Type: {medicine.drug_type}")
         print(f"Indication: {medicine.indication}")
         print(f"Drug Groups: {', '.join(medicine.groups)}")
     except (ValueError, Exception) as e:
+        logger.error(f"Error: {e}")
         print(f"Error: {e}")
         sys.exit(1)

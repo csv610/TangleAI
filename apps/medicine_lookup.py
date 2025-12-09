@@ -12,6 +12,10 @@ from datetime import datetime
 # Add tangle directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tangle'))
 
+from logging_utils import setup_logging
+
+logger = setup_logging("medicine_lookup.log")
+
 from drugbank_medicine import (
     MedicineInfo, ChemicalProperties, Pharmacodynamics, Pharmacokinetics,
     DrugType, DrugGroup, RouteOfAdministration, ATCCode, Target, Enzyme,
@@ -58,6 +62,7 @@ class MedicineLookupService:
         Raises:
             ValueError: If API key is not set or lookup fails
         """
+        logger.info(f"Looking up information for: {medicine_name}")
         print(f"Looking up information for: {medicine_name}")
 
         # Create model input with structured output
@@ -68,19 +73,24 @@ class MedicineLookupService:
 
         try:
             # Call Perplexity API with structured output
+            logger.info(f"Sending API request for medicine: {medicine_name}")
             response = self.client.generate_content(model_input, self.config)
 
-            # Validate and parse the response
-            medicine_info = MedicineInfo.model_validate_json(
-                response.choices[0].message.content
-            )
+            # Structured output was requested, so response.json should contain the parsed model
+            if not response.json:
+                logger.error(f"No structured output received from API for: {medicine_name}")
+                raise ValueError("No structured output received from API")
 
+            medicine_info = response.json
+            logger.info(f"Successfully retrieved information for: {medicine_info.name}")
             print(f"  ✓ Successfully retrieved information for: {medicine_info.name}")
             return medicine_info
 
         except ValueError as e:
+            logger.error(f"Failed to lookup medicine information: {str(e)}")
             raise ValueError(f"Failed to lookup medicine information: {str(e)}")
         except Exception as e:
+            logger.error(f"Error during medicine lookup: {str(e)}")
             raise Exception(f"Error during medicine lookup: {str(e)}")
 
 
@@ -157,18 +167,26 @@ if __name__ == "__main__":
     else:
         medicine_name = input("Enter medicine name: ")
 
+    logger.info(f"Starting medicine lookup: {medicine_name}")
     try:
         medicine_info = get_medicine_info(medicine_name)
         display_medicine_info(medicine_info)
 
+        # Create outputs directory if it doesn't exist
+        output_dir = os.path.join(os.path.dirname(__file__), "outputs", "medicine_info")
+        os.makedirs(output_dir, exist_ok=True)
+
         # Save to JSON
-        output_file = f"{medicine_name.lower().replace(' ', '_')}_info.json"
+        output_file = os.path.join(output_dir, f"{medicine_name.lower().replace(' ', '_')}_info.json")
+        logger.info(f"Saving medicine information to: {output_file}")
         with open(output_file, 'w') as f:
             json.dump(medicine_info.model_dump(mode='json'), f, indent=2, default=str)
 
+        logger.info(f"Medicine information saved successfully to: {output_file}")
         print(f"\nFull information saved to: {output_file}")
 
     except Exception as e:
+        logger.error(f"Error during medicine lookup: {str(e)}")
         print(f"\nError: {str(e)}")
         import traceback
         traceback.print_exc()

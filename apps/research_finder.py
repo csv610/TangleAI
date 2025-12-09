@@ -7,7 +7,6 @@ Researches topics and displays results in the terminal
 import sys
 import json
 import argparse
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -17,17 +16,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "tangle"))
 
 from perplx_client import PerplexityClient
 from config import ModelConfig, ModelInput
+from logging_utils import setup_logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("research_finder.log"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("research_finder")
+logger = setup_logging("research_finder.log")
 
 
 class ResearchResponse(BaseModel):
@@ -82,25 +73,15 @@ def research_topic(query: str, client: PerplexityClient, model: str = "sonar-pro
         response = client.generate_content(model_input, config)
 
         # Extract the response content
-        if response.choices and len(response.choices) > 0:
-            content = response.choices[0].message.content
-            logger.info("Successfully received response from API")
+        logger.info("Successfully received response from API")
 
-            # Try to parse as JSON if structured output is returned
-            try:
-                parsed_data = json.loads(content) if isinstance(content, str) else content
-                logger.info("Successfully parsed response")
-                return parsed_data
-            except (json.JSONDecodeError, TypeError):
-                # If not JSON, return the raw content
-                logger.warning("Response is not structured JSON, returning as text")
-                return {
-                    "summary": content,
-                    "sources": []
-                }
-        else:
-            logger.error("No answer provided in the response.")
-            return None
+        # Structured output was requested, so response.json should contain the parsed model
+        if response.json:
+            logger.info("Successfully parsed structured JSON response")
+            return response.json.model_dump()
+
+        logger.error("No structured output received in the response.")
+        return None
 
     except Exception as e:
         logger.error(f"Error querying API: {str(e)}")

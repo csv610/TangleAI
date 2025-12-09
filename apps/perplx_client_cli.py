@@ -7,49 +7,25 @@ Supports text questions, image analysis, and multi-modal queries.
 import sys
 import os
 import argparse
-from pathlib import Path
 
 # Add tangle directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tangle'))
 
 from perplx_client import PerplexityClient
 from config import ModelConfig, ModelInput
+from logging_utils import setup_logging
+
+logger = setup_logging("perplx_client_cli.log")
 
 
 class PerplexityCLI:
     """Command-line interface for Perplexity AI."""
 
-    # Supported image formats
-    SUPPORTED_IMAGE_FORMATS = ('jpg', 'jpeg', 'png', 'gif', 'webp')
     SUPPORTED_MODELS = ('sonar', 'sonar-pro', 'sonar-reasoning')
 
     def __init__(self):
         """Initialize the CLI tool."""
         self.client = None
-
-    def validate_image(self, image_path: str) -> bool:
-        """
-        Validate that the image file exists and has a supported format.
-
-        Args:
-            image_path: Path to the image file
-
-        Returns:
-            True if valid, raises FileNotFoundError otherwise
-        """
-        path = Path(image_path)
-
-        if not path.exists():
-            raise FileNotFoundError(f"Image file not found: {image_path}")
-
-        suffix = path.suffix.lower().lstrip('.')
-        if suffix not in self.SUPPORTED_IMAGE_FORMATS:
-            raise ValueError(
-                f"Unsupported image format: {suffix}. "
-                f"Supported formats: {', '.join(self.SUPPORTED_IMAGE_FORMATS)}"
-            )
-
-        return True
 
     def query_text_only(self, query: str, config: ModelConfig) -> str:
         """
@@ -62,6 +38,7 @@ class PerplexityCLI:
         Returns:
             Response text from the API
         """
+        logger.info(f"Text query received: {query}")
         print(f"\n📝 Query: {query}\n")
         print("⏳ Processing text query...")
 
@@ -70,8 +47,10 @@ class PerplexityCLI:
             system_prompt=None
         )
 
+        logger.info("Sending text-only request to Perplexity API")
         response = self.client.generate_content(model_input, config)
-        return response.choices[0].message.content
+        logger.info("Successfully received response from API")
+        return response.text or ""
 
     def query_text_with_image(
         self,
@@ -90,8 +69,7 @@ class PerplexityCLI:
         Returns:
             Response text from the API
         """
-        self.validate_image(image_path)
-
+        logger.info(f"Text+Image query received - Image: {image_path}, Query: {query}")
         print(f"\n🖼️  Image: {image_path}")
         print(f"📝 Query: {query}\n")
         print("⏳ Processing image and text query...")
@@ -102,8 +80,10 @@ class PerplexityCLI:
             system_prompt=None
         )
 
+        logger.info("Sending text+image request to Perplexity API")
         response = self.client.generate_content(model_input, config)
-        return response.choices[0].message.content
+        logger.info("Successfully received response from API")
+        return response.text or ""
 
     def query_image_only(self, image_path: str, config: ModelConfig) -> str:
         """
@@ -116,8 +96,7 @@ class PerplexityCLI:
         Returns:
             Response text from the API
         """
-        self.validate_image(image_path)
-
+        logger.info(f"Image-only query received: {image_path}")
         print(f"\n🖼️  Image: {image_path}")
         print("⏳ Analyzing image...\n")
 
@@ -129,8 +108,10 @@ class PerplexityCLI:
             system_prompt=None
         )
 
+        logger.info("Sending image-only request to Perplexity API")
         response = self.client.generate_content(model_input, config)
-        return response.choices[0].message.content
+        logger.info("Successfully received response from API")
+        return response.text or ""
 
     def format_response(self, response: str, save_file: str = None) -> None:
         """
@@ -148,10 +129,22 @@ class PerplexityCLI:
 
         if save_file:
             try:
+                # If no directory specified, use outputs/responses/
+                if not os.path.dirname(save_file):
+                    output_dir = os.path.join(os.path.dirname(__file__), "outputs", "responses")
+                    os.makedirs(output_dir, exist_ok=True)
+                    save_file = os.path.join(output_dir, save_file)
+                else:
+                    # Create directory if it doesn't exist
+                    os.makedirs(os.path.dirname(save_file), exist_ok=True)
+
+                logger.info(f"Saving response to: {save_file}")
                 with open(save_file, 'w', encoding='utf-8') as f:
                     f.write(response)
+                logger.info(f"Response successfully saved to: {save_file}")
                 print(f"✓ Response saved to: {save_file}")
             except IOError as e:
+                logger.error(f"Could not save response: {e}")
                 print(f"⚠️  Could not save response: {e}")
 
     def run(self, args):
@@ -163,9 +156,11 @@ class PerplexityCLI:
         """
         try:
             # Initialize client
+            logger.info("Initializing Perplexity client")
             self.client = PerplexityClient()
 
             # Build model configuration
+            logger.info(f"Building model configuration - Model: {args.model}, Web search: {args.web_search}")
             config = ModelConfig(
                 model=args.model,
                 max_tokens=args.max_tokens,
@@ -183,6 +178,7 @@ class PerplexityCLI:
             # Determine query type and execute
             if args.image and args.query:
                 # Text + Image query
+                logger.info("Executing text+image query")
                 response = self.query_text_with_image(
                     args.query,
                     args.image,
@@ -190,24 +186,31 @@ class PerplexityCLI:
                 )
             elif args.image:
                 # Image only query
+                logger.info("Executing image-only query")
                 response = self.query_image_only(args.image, config)
             elif args.query:
                 # Text only query
+                logger.info("Executing text-only query")
                 response = self.query_text_only(args.query, config)
             else:
+                logger.error("No query or image provided")
                 print("Error: Please provide either a query (-q) or an image (-i), or both")
                 sys.exit(1)
 
             # Display and optionally save response
             self.format_response(response, args.output)
+            logger.info("Query completed successfully")
 
         except FileNotFoundError as e:
+            logger.error(f"File not found error: {e}")
             print(f"❌ Error: {e}", file=sys.stderr)
             sys.exit(1)
         except ValueError as e:
+            logger.error(f"Value error: {e}")
             print(f"❌ Error: {e}", file=sys.stderr)
             sys.exit(1)
         except Exception as e:
+            logger.error(f"Unexpected error: {e}")
             print(f"❌ Unexpected error: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
@@ -319,7 +322,7 @@ Examples:
     )
 
     parser.add_argument(
-        '--return-questions',
+        '--faq',
         action='store_true',
         dest='return_related_questions',
         help="Request related questions in response"
