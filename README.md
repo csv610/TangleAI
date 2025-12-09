@@ -165,7 +165,7 @@ config = ModelConfig(
     stream=False,                   # Stream responses, default False
 
     # Search behavior
-    search_mode="web",              # web | local, default web
+    search_mode="web",              # academic | sec | web, default web
     disable_search=False,           # Disable web search, default False
     language_preference="en",       # Language code (en, es, fr, etc)
 
@@ -182,6 +182,21 @@ config = ModelConfig(
     presence_penalty=0.0,           # Penalize token repetition
     frequency_penalty=0.0           # Penalize frequent tokens
 )
+```
+
+#### Search Mode Options
+
+The `search_mode` parameter controls the type of search performed:
+
+```python
+# General web search (default) - uses Perplexity's continuously refreshed web index
+config = ModelConfig(search_mode="web")
+
+# Academic search - prioritizes scholarly sources, peer-reviewed articles, and research papers
+config = ModelConfig(search_mode="academic")
+
+# SEC search - focuses on SEC filings, relevant for financial and legal research
+config = ModelConfig(search_mode="sec")
 ```
 
 ### SearchFilter Parameters

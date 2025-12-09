@@ -103,7 +103,25 @@ class SearchFilter:
 
 @dataclass
 class ModelConfig:
-    """Configuration for model interactions."""
+    """Configuration for model interactions.
+
+    Attributes:
+        model: Model name (sonar, sonar-pro)
+        temperature: Randomness/creativity (0.0-2.0), default 0.2
+        top_p: Nucleus sampling (0.0-1.0), default 0.9
+        top_k: Top-k sampling (0 disabled), default 0
+        max_tokens: Maximum response length, default 8000
+        frequency_penalty: Penalize frequent tokens, default 0.0
+        presence_penalty: Penalize token repetition, default 0.0
+        disable_search: Disable web search, default False
+        search_mode: Type of search - 'web', 'academic', or 'sec', default 'web'
+        language_preference: Language code (e.g., 'en', 'es', 'fr'), default 'en'
+        reasoning_effort: Reasoning level - 'low', 'medium', or 'high', default 'medium'
+        return_images: Include images in results, default False
+        return_related_questions: Include related questions, default False
+        return_citations: Include citations in results, default True
+        stream: Stream responses, default False
+    """
 
     model: str = "sonar"
     disable_search: bool = False
